@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { HashRouter, Routes, Route, Link } from "react-router-dom";
+import { HashRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AppProvider } from "./hooks/useAppContext";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
@@ -16,8 +16,6 @@ import Chatbot from "./components/Chatbot";
 import PaymentPage from "./pages/PaymentPage";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import ProtectedRoute from "./components/ProtectedRoute";
-import AuthTabs from "./components/AuthTabs";
 import AuthModal from "./components/AuthModal";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "./services/Firebase";
@@ -50,43 +48,105 @@ const App = () => {
         <AuthModal
           open={authModalOpen}
           onClose={() => setAuthModalOpen(false)}
+          onSuccess={handleAuthSuccess}
         />
         <div className="flex flex-col min-h-screen font-sans text-gray-900">
-          <Header onProtectedNav={handleProtectedNav} user={user} />
+          <Header
+            user={user}
+            onLoginClick={() => setAuthModalOpen(true)}
+            onProtectedNav={handleProtectedNav}
+          />
           <main className="flex-grow container mx-auto px-4 py-8">
             <Routes>
-              {/* Auth route */}
-              <Route path="/auth" element={<AuthTabs />} />
-              {/* Protected routes */}
               <Route
                 path="/"
                 element={
-                  <HomePage onProtectedNav={handleProtectedNav} user={user} />
+                  <HomePage user={user} onProtectedNav={handleProtectedNav} />
                 }
               />
+              {/* All other routes are protected */}
               <Route
                 path="/find"
                 element={
                   user ? (
                     <FindParkingPage />
                   ) : (
-                    <HomePage onProtectedNav={handleProtectedNav} user={user} />
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
                   )
                 }
               />
-              <Route path="/book/:id" element={<BookingPage />} />
-              <Route path="/payment" element={<PaymentPage />} />
-              <Route path="/ticket" element={<TicketPage />} />
-              <Route path="/list-space" element={<ListSpacePage />} />
-              <Route path="/profile" element={<ProfilePage />} />
+              <Route
+                path="/book/:id"
+                element={
+                  user ? (
+                    <BookingPage />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
+              />
+              <Route
+                path="/payment"
+                element={
+                  user ? (
+                    <PaymentPage />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
+              />
+              <Route
+                path="/ticket"
+                element={
+                  user ? (
+                    <TicketPage />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
+              />
+              <Route
+                path="/list-space"
+                element={
+                  user ? (
+                    <ListSpacePage />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  user ? (
+                    <ProfilePage />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
+              />
               <Route
                 path="/manager-dashboard/:id"
-                element={<ManagerDashboard />}
+                element={
+                  user ? (
+                    <ManagerDashboard />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
               />
-              <Route path="/admin" element={<AdminPage />} />
+              <Route
+                path="/admin"
+                element={
+                  user ? (
+                    <AdminPage />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
+                }
+              />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
-            {/* For the "Find Parking Now" button */}
           </main>
           <Footer />
           <Chatbot />
