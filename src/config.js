@@ -1,0 +1,1 @@
+const safeProcess = typeof process !== "undefined" ? process : { env: {} };
