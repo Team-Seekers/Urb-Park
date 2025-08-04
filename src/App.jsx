@@ -14,11 +14,11 @@ import ManagerDashboard from "./pages/ManagerDashboard";
 import NotFoundPage from "./pages/NotFoundPage";
 import Chatbot from "./components/Chatbot";
 import PaymentPage from "./pages/PaymentPage";
-import { ToastContainer } from "react-toastify";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import AuthModal from "./components/AuthModal";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { auth } from "./services/Firebase";
+import { auth, db } from "./services/Firebase";
 
 const App = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -27,7 +27,7 @@ const App = () => {
 
   // Handler for protected navigation
   const handleProtectedNav = (path) => {
-    if (!user) {
+    if (!user || !user.emailVerified) {
       setRedirectPath(path);
       setAuthModalOpen(true);
     } else {
@@ -38,7 +38,33 @@ const App = () => {
   // After login, redirect to intended page
   const handleAuthSuccess = () => {
     setAuthModalOpen(false);
-    window.location.hash = `#${redirectPath}`;
+    if (user && user.emailVerified) {
+      window.location.hash = `#${redirectPath}`;
+    } else {
+      toast.info("Please verify your email before accessing features.");
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const userCred = await signInWithEmailAndPassword(
+        auth,
+        login.email,
+        login.password
+      );
+      if (!userCred.user.emailVerified) {
+        toast.error("Please verify your email first.");
+      } else {
+        toast.success("Login successful!");
+        onSuccess?.();
+        onClose();
+      }
+    } catch (err) {
+      toast.error(err.message);
+    }
+    setLoading(false);
   };
 
   return (
