@@ -1,10 +1,39 @@
-import React from "react";
-import { Link } from "react-router-dom";
-import Animate from "../components/Animate";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+/* import HeroIllustration from '../components/HeroIllustration'; */
 
-const HomePage = () => {
+const HomePage = ({ user, onProtectedNav }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const navigate = useNavigate();
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const trimmedSearch = searchTerm.trim();
+    if (trimmedSearch) {
+      if (user) {
+        navigate(`/find?search=${encodeURIComponent(trimmedSearch)}`);
+      } else {
+        onProtectedNav?.(`/find?search=${encodeURIComponent(trimmedSearch)}`);
+      }
+    } else {
+      if (user) {
+        navigate("/find");
+      } else {
+        onProtectedNav?.("/find");
+      }
+    }
+  };
+
+  const handleNavClick = (path) => {
+    if (user) {
+      navigate(path);
+    } else {
+      onProtectedNav?.(path);
+    }
+  };
+
   return (
-    <div className="space-y-24 md:space-y-32">
+    <div className="space-y-24 md:space-y-32 mt-10">
       {/* Hero Section */}
       <section className="container mx-auto px-4">
         <div className="grid md:grid-cols-2 gap-12 items-center">
@@ -12,20 +41,44 @@ const HomePage = () => {
             <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-4">
               Your Parking Spot, <br /> In a Tap.
             </h1>
-            <p className="text-lg text-gray-600 max-w-md mx-auto md:mx-0 mb-8">
+            <p className="text-lg text-gray-600 max-w-xl mx-auto md:mx-0 mb-8">
               No more circling. Find, book, and pay for your parking space in
               seconds with real-time availability.
             </p>
-            <Link
-              to="/find"
-              className="inline-block bg-yellow-500 hover:bg-yellow-300 text-gray-900 font-bold py-4 px-10 rounded-lg text-lg transition-transform transform hover:scale-105 shadow-lg"
-            >
-              Find Parking Now
-            </Link>
+            <form onSubmit={handleSearchSubmit} className="mt-8">
+              <div className="flex items-center bg-gray-900 p-2 rounded-lg shadow-lg max-w-xl mx-auto md:mx-0">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-gray-300 mx-3 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Enter an address, landmark, or area..."
+                  className="w-full p-2 border-none focus:ring-0 text-lg bg-transparent text-white placeholder-gray-400"
+                  aria-label="Search for parking"
+                />
+                <button
+                  onClick={() => handleNavClick("/find")}
+                  className="bg-yellow-400 whitespace-nowrap hover:bg-yellow-300 text-gray-900 font-bold py-3 px-6 rounded-md text-lg transition-transform transform hover:scale-105 shadow-sm"
+                >
+                  Find Parking Now
+                </button>
+              </div>
+            </form>
           </div>
-          <div className="hidden md:block">
-            <Animate/>
-          </div>
+          <div className="hidden md:block">{/* <HeroIllustration /> */}</div>
         </div>
       </section>
 
@@ -67,7 +120,7 @@ const HomePage = () => {
             </div>
           </div>
           <div className="bg-white p-8 rounded-lg shadow-lg flex items-start space-x-4 md:w-25">
-            <div className="flex-shrink-0 bg-yellow-100 text-yellow-500 rounded-full p-3 mt-1">
+            <div className="flex-shrink-0 bg-yellow-100 text-yellow-400 rounded-full p-3 mt-1">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-7 w-7"
@@ -92,7 +145,7 @@ const HomePage = () => {
             </div>
           </div>
           <div className="bg-white p-8 rounded-lg shadow-lg flex items-start space-x-4 md:w-25">
-            <div className="flex-shrink-0 bg-blue-100 text-blue-600 rounded-full p-3 mt-1">
+            <div className="flex-shrink-0 bg-blue-100 text-blue-500 rounded-full p-3 mt-1">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-7 w-7"

@@ -2,16 +2,18 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
+// Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBze2Vqii2oDFaqp0H13Wj1j0MWz1ZtzsQ",
-  authDomain: "urb-park.firebaseapp.com",
-  projectId: "urb-park",
-  storageBucket: "urb-park.firebasestorage.app",
-  messagingSenderId: "77880617933",
-  appId: "1:77880617933:web:a460c30750f9bdd363f284",
-  measurementId: "G-PWYVPHFV40",
+  apiKey: "AIzaSyAd9NpMcYgQ18uWhfIT7MBwh_KNprdZLoQ",
+  authDomain: "urban-park-d8825.firebaseapp.com",
+  projectId: "urban-park-d8825",
+  storageBucket: "urban-park-d8825.appspot.com",
+  messagingSenderId: "258352254915",
+  appId: "1:258352254915:web:2487d3a17efa302fd8b776",
+  measurementId: "G-8BB8ZTJMK5"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);

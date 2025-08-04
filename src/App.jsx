@@ -27,7 +27,7 @@ const App = () => {
 
   // Handler for protected navigation
   const handleProtectedNav = (path) => {
-    if (!user || !user.emailVerified) {
+    if (!user) {
       setRedirectPath(path);
       setAuthModalOpen(true);
     } else {
@@ -38,33 +38,9 @@ const App = () => {
   // After login, redirect to intended page
   const handleAuthSuccess = () => {
     setAuthModalOpen(false);
-    if (user && user.emailVerified) {
+    if (user) {
       window.location.hash = `#${redirectPath}`;
-    } else {
-      toast.info("Please verify your email before accessing features.");
     }
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const userCred = await signInWithEmailAndPassword(
-        auth,
-        login.email,
-        login.password
-      );
-      if (!userCred.user.emailVerified) {
-        toast.error("Please verify your email first.");
-      } else {
-        toast.success("Login successful!");
-        onSuccess?.();
-        onClose();
-      }
-    } catch (err) {
-      toast.error(err.message);
-    }
-    setLoading(false);
   };
 
   return (
@@ -88,6 +64,16 @@ const App = () => {
                 path="/"
                 element={
                   <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                }
+              />
+              <Route
+                path="/manager-dashboard"
+                element={
+                  user ? (
+                    <ManagerDashboard />
+                  ) : (
+                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
+                  )
                 }
               />
               {/* All other routes are protected */}
