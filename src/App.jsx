@@ -40,7 +40,11 @@ const App = () => {
     setAuthModalOpen(false);
     if (user) {
       window.location.hash = `#${redirectPath}`;
+<<<<<<< HEAD
     }
+=======
+    } 
+>>>>>>> adcc593 (Add Vite and build script)
   };
 
   return (
