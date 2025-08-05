@@ -63,10 +63,12 @@ export default function AuthModal({ open, onClose, onSuccess }) {
 
   const handleSignup = async (e) => {
     e.preventDefault();
+  
     if (signup.password !== signup.confirmpassword) {
       toast.error("Passwords do not match");
       return;
     }
+  
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(
@@ -75,15 +77,18 @@ export default function AuthModal({ open, onClose, onSuccess }) {
         signup.password
       );
       const uid = userCredential.user.uid;
+  
+      // Extract name from email
+      const nameFromEmail = signup.email.split("@")[0];
+  
       await setDoc(doc(db, "users", uid), {
-        username: signup.email.split("@")[0],
-        email: signup.email,
-        phone: signup.phoneno,
-        vehicles: [signup.vehicle],
-        history: [],
         createdAt: new Date(),
+        email: signup.email,
+        name: nameFromEmail,
+        vehicleNumber: signup.vehicle,
+        bookings: [], // initialized empty
       });
-
+  
       toast.success("Signup successful! You are now logged in.");
       onSuccess?.();
       onClose();
@@ -92,7 +97,7 @@ export default function AuthModal({ open, onClose, onSuccess }) {
     }
     setLoading(false);
   };
-
+   
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setLoading(true);

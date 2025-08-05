@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../hooks/useAppContext";
-import { getParkingLotById } from "../services/parkingService";
+import {
+  getParkingLotById,
+  addBookingToFirestore,
+} from "../services/parkingService";
 import Spinner from "../components/Spinner";
 
 const PaymentPage = () => {
@@ -11,6 +14,12 @@ const PaymentPage = () => {
   const [processing, setProcessing] = useState(false);
   const [paid, setPaid] = useState(false);
   const [error, setError] = useState("");
+
+  // Get current user ID (you'll need to implement this based on your auth system)
+  const getCurrentUserId = () => {
+    // For now, using a mock user ID. Replace this with your actual auth user ID
+    return "user123"; // Replace with actual user ID from your auth system
+  };
 
   useEffect(() => {
     if (!booking) {
@@ -25,16 +34,39 @@ const PaymentPage = () => {
       .catch(() => setError("Could not load lot details."));
   }, [booking, navigate]);
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     setProcessing(true);
     setError("");
-    setTimeout(() => {
+
+    try {
+      // Simulate payment processing
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // After successful payment, store booking in Firestore
+      const uid = getCurrentUserId();
+      const bookingData = {
+        areaId: booking.lotId || "park1",
+        slotId: booking.spotId || "s1",
+        startTime: new Date("2025-08-31T11:00:00"),
+        endTime: new Date("2025-08-31T12:00:00"),
+        lotName: booking.lotName,
+        vehicleNumber: booking.vehicleNumber,
+        paymentMethod: booking.paymentMethod,
+      };
+
+      await addBookingToFirestore(uid, bookingData);
+
       setProcessing(false);
       setPaid(true);
+
       setTimeout(() => {
         navigate("/ticket");
-      }, 2000); // Wait 2 seconds on success screen before redirecting
-    }, 2000); // Simulate 2 second payment processing
+      }, 2000);
+    } catch (error) {
+      console.error("Payment or booking storage failed:", error);
+      setError("Payment failed. Please try again.");
+      setProcessing(false);
+    }
   };
 
   if (!booking || !lot) {

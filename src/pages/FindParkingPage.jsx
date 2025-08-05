@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { getParkingLots } from "../services/parkingService";
+import {
+  getParkingLots,
+  getNearbyParkingAreas,
+  fetchAllParkingAreas,
+} from "../services/parkingService";
 import ParkingCard from "../components/ParkingCard";
 import Spinner from "../components/Spinner";
 
@@ -22,6 +26,9 @@ const FindParkingPage = () => {
   const [ratingFilter, setRatingFilter] = useState(0);
   const [featuresFilter, setFeaturesFilter] = useState([]);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [showNearbyOnly, setShowNearbyOnly] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   const fetchData = async (isInitialLoad = false) => {
     if (isInitialLoad) setLoading(true);
@@ -61,6 +68,126 @@ const FindParkingPage = () => {
     );
   };
 
+  const handleNearbyParking = async () => {
+    try {
+      setNearbyLoading(true);
+      setShowNearbyOnly(true);
+
+      const nearbyAreas = await getNearbyParkingAreas(5); // 5km radius
+
+      // Convert Firestore data to match the expected format
+      const convertedAreas = nearbyAreas.map((area) => ({
+        id: area.id,
+        name: area.name,
+        address: area.location,
+        lat: area.lat,
+        lng: area.lng,
+        distance: area.distance,
+        totalSpots: 50, // Default values since not in Firestore
+        availableSpots: 30,
+        pricePerHour: 50,
+        rating: 4.0,
+        reviewCount: 25,
+        features: ["Covered", "24/7 Security", "Mobile Pass"],
+        image:
+          "https://picsum.photos/400/300?random=" +
+          Math.floor(Math.random() * 100),
+        spots: [],
+        status: "active",
+        ownerId: "firestore-owner",
+        verificationChecks: {
+          cameraFixed: true,
+          apiIntegrated: true,
+          rehearsalComplete: true,
+        },
+      }));
+
+      setLots(convertedAreas);
+      setFilteredLots(convertedAreas);
+    } catch (error) {
+      console.error("Error fetching nearby parking:", error);
+      alert(
+        "Could not fetch nearby parking. Please check your location permissions."
+      );
+    } finally {
+      setNearbyLoading(false);
+    }
+  };
+
+  const handleShowAllParking = () => {
+    setShowNearbyOnly(false);
+    fetchData(true);
+  };
+
+  const handleSearchParking = async () => {
+    if (!searchTerm.trim()) return;
+
+    try {
+      setSearchLoading(true);
+      setShowNearbyOnly(false);
+
+      const allAreas = await fetchAllParkingAreas();
+
+      // Filter areas by search term
+      const matchingAreas = allAreas.filter(
+        (area) =>
+          area.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          area.location.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+      // Convert Firestore data to match the expected format
+      const convertedAreas = matchingAreas.map((area) => ({
+        id: area.id,
+        name: area.name,
+        address: area.location,
+        lat: area.lat || 0,
+        lng: area.lng || 0,
+        distance: 0, // No distance calculation for search
+        totalSpots: 50,
+        availableSpots: 30,
+        pricePerHour: 50,
+        rating: 4.0,
+        reviewCount: 25,
+        features: ["Covered", "24/7 Security", "Mobile Pass"],
+        image:
+          "https://picsum.photos/400/300?random=" +
+          Math.floor(Math.random() * 100),
+        spots: [],
+        status: "active",
+        ownerId: "firestore-owner",
+        verificationChecks: {
+          cameraFixed: true,
+          apiIntegrated: true,
+          rehearsalComplete: true,
+        },
+      }));
+
+      setLots(convertedAreas);
+      setFilteredLots(convertedAreas);
+    } catch (error) {
+      console.error("Error searching parking areas:", error);
+      alert("Could not search parking areas. Please try again.");
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    // If search term is cleared, show all parking
+    if (!e.target.value.trim()) {
+      setShowNearbyOnly(false);
+      fetchData(true);
+    }
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchTerm.trim()) {
+      handleSearchParking();
+    }
+  };
+
   return (
     <div>
       <h1 className="text-4xl font-bold text-center mb-2 text-gray-900">
@@ -92,7 +219,75 @@ const FindParkingPage = () => {
           </svg>
           {isFilterVisible ? "Hide" : "Show"} Filters
         </button>
+
+        <button
+          onClick={handleNearbyParking}
+          disabled={nearbyLoading}
+          className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
+        >
+          {nearbyLoading ? (
+            <svg
+              className="animate-spin h-5 w-5"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+          ) : (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          )}
+          {nearbyLoading ? "Finding..." : "Nearby Parking"}
+        </button>
+
+        {showNearbyOnly && (
+          <button
+            onClick={handleShowAllParking}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-colors"
+          >
+            Show All Parking
+          </button>
+        )}
       </div>
+
+      {showNearbyOnly && (
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-green-800 font-medium">
+            📍 Showing nearby parking areas within 5km of your location
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Filter Sidebar */}
@@ -110,14 +305,46 @@ const FindParkingPage = () => {
                   >
                     Search
                   </label>
-                  <input
-                    id="search"
-                    type="text"
-                    placeholder="Name or address..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
-                  />
+                  <form onSubmit={handleSearchSubmit} className="flex gap-2">
+                    <input
+                      id="search"
+                      type="text"
+                      placeholder="Name or address..."
+                      value={searchTerm}
+                      onChange={handleSearchInputChange}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={searchLoading || !searchTerm.trim()}
+                      className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {searchLoading ? (
+                        <svg
+                          className="animate-spin h-4 w-4"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                      ) : (
+                        "Search"
+                      )}
+                    </button>
+                  </form>
                 </div>
 
                 <div>
@@ -191,7 +418,7 @@ const FindParkingPage = () => {
 
         {/* Main Content */}
         <main className={isFilterVisible ? "lg:w-3/4" : "w-full"}>
-          {loading ? (
+          {loading || nearbyLoading || searchLoading ? (
             <Spinner />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-8">
@@ -202,10 +429,18 @@ const FindParkingPage = () => {
               ) : (
                 <div className="col-span-full text-center py-16 bg-white rounded-lg shadow-lg">
                   <p className="text-xl text-gray-500">
-                    No parking lots found.
+                    {showNearbyOnly
+                      ? "No nearby parking areas found within 5km."
+                      : searchTerm.trim()
+                      ? `No parking areas found for "${searchTerm}".`
+                      : "No parking lots found."}
                   </p>
                   <p className="text-gray-400 mt-2">
-                    Try adjusting your filters.
+                    {showNearbyOnly
+                      ? "Try expanding your search radius or check location permissions."
+                      : searchTerm.trim()
+                      ? "Try a different search term or check your spelling."
+                      : "Try adjusting your filters."}
                   </p>
                 </div>
               )}

@@ -1,4 +1,6 @@
 import { SpotStatus, BookingStatus } from "../../types";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "./Firebase";
 
 // Helper to generate spots for a lot
 /**
@@ -14,6 +16,133 @@ const generateSpots = (totalSpots) => {
     });
   }
   return spots;
+};
+
+// Utility function to calculate distance between two coordinates (Haversine formula)
+export const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Radius of the earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+};
+
+// Parse coordinates from Firestore format (e.g., "11° N, 8° E" to numbers)
+export const parseCoordinates = (coordStr) => {
+  if (!coordStr) return null;
+
+  try {
+    // Handle different coordinate formats
+    if (typeof coordStr === "string") {
+      // Format: "11° N, 8° E" or "11, 8" or "11.123, 8.456"
+      const cleanStr = coordStr.replace(/[°]/g, "").trim();
+      const parts = cleanStr.split(",").map((part) => part.trim());
+
+      if (parts.length === 2) {
+        let lat = parseFloat(parts[0]);
+        let lng = parseFloat(parts[1]);
+
+        // Handle N/S and E/W indicators
+        if (parts[0].includes("S")) lat = -lat;
+        if (parts[1].includes("W")) lng = -lng;
+
+        return { lat, lng };
+      }
+    } else if (Array.isArray(coordStr)) {
+      // Format: [lat, lng]
+      return { lat: coordStr[0], lng: coordStr[1] };
+    } else if (typeof coordStr === "object" && coordStr.lat && coordStr.lng) {
+      // Format: {lat: number, lng: number}
+      return { lat: coordStr.lat, lng: coordStr.lng };
+    }
+  } catch (error) {
+    console.error("Error parsing coordinates:", error);
+  }
+
+  return null;
+};
+
+// Fetch all parking areas from Firestore
+export const fetchAllParkingAreas = async () => {
+  try {
+    const querySnapshot = await getDocs(collection(db, "parkingAreas"));
+    return querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+  } catch (error) {
+    console.error("Error fetching parking areas:", error);
+    return [];
+  }
+};
+
+// Get user's current location
+export const getUserLocation = () => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation not supported"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        reject(error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  });
+};
+
+// Get nearby parking areas based on user location
+export const getNearbyParkingAreas = async (maxDistance = 5) => {
+  try {
+    const userLocation = await getUserLocation();
+    const parkingAreas = await fetchAllParkingAreas();
+
+    const parkingWithDistance = parkingAreas
+      .map((area) => {
+        const coords = parseCoordinates(area.coordinates);
+        if (!coords) return null;
+
+        const distance = getDistanceFromLatLonInKm(
+          userLocation.lat,
+          userLocation.lng,
+          coords.lat,
+          coords.lng
+        );
+
+        return {
+          ...area,
+          distance,
+          lat: coords.lat,
+          lng: coords.lng,
+        };
+      })
+      .filter((area) => area !== null && area.distance <= maxDistance)
+      .sort((a, b) => a.distance - b.distance);
+
+    return parkingWithDistance;
+  } catch (error) {
+    console.error("Error getting nearby parking areas:", error);
+    throw error;
+  }
 };
 
 let MOCK_PARKING_LOTS = [
@@ -339,4 +468,88 @@ export const submitRatingForBooking = (bookingId, lotId, newRating) => {
 
     setTimeout(() => resolve({ ...booking }), 500);
   });
+};
+
+// --- Firestore Booking Functions ---
+import {
+  addDoc,
+  query,
+  where,
+  doc,
+  updateDoc,
+  Timestamp,
+} from "firebase/firestore";
+
+// Add a new booking for a user after successful payment
+export const addBookingToFirestore = async (uid, bookingData) => {
+  try {
+    const bookingRef = collection(db, "users", uid, "bookings");
+    const docRef = await addDoc(bookingRef, {
+      areaId: bookingData.areaId,
+      slotId: bookingData.slotId,
+      startTime: Timestamp.fromDate(new Date(bookingData.startTime)),
+      endTime: Timestamp.fromDate(new Date(bookingData.endTime)),
+      createdAt: Timestamp.now(),
+      paymentComplete: true,
+      status: "active",
+      lotName: bookingData.lotName,
+      vehicleNumber: bookingData.vehicleNumber,
+      paymentMethod: bookingData.paymentMethod,
+    });
+    return { id: docRef.id, ...bookingData };
+  } catch (error) {
+    console.error("Error adding booking to Firestore:", error);
+    throw error;
+  }
+};
+
+// Get all bookings for a user (booking history)
+export const getBookingHistoryFromFirestore = async (uid) => {
+  try {
+    const snapshot = await getDocs(collection(db, "users", uid, "bookings"));
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      bookingTime: doc.data().createdAt?.toDate() || new Date(),
+    }));
+  } catch (error) {
+    console.error("Error fetching booking history:", error);
+    return [];
+  }
+};
+
+// Get the active booking for a user
+export const getActiveBookingFromFirestore = async (uid) => {
+  try {
+    const q = query(
+      collection(db, "users", uid, "bookings"),
+      where("status", "==", "active")
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return {
+      id: doc.id,
+      ...doc.data(),
+      bookingTime: doc.data().createdAt?.toDate() || new Date(),
+    };
+  } catch (error) {
+    console.error("Error fetching active booking:", error);
+    return null;
+  }
+};
+
+// Update booking status
+export const updateBookingStatusInFirestore = async (
+  uid,
+  bookingId,
+  newStatus
+) => {
+  try {
+    const bookingRef = doc(db, "users", uid, "bookings", bookingId);
+    await updateDoc(bookingRef, { status: newStatus });
+  } catch (error) {
+    console.error("Error updating booking status:", error);
+    throw error;
+  }
 };
