@@ -3,6 +3,7 @@ import { getBotResponseStream } from "../services/geminiService";
 import { ICONS } from "../constants";
 
 const Chatbot = () => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
