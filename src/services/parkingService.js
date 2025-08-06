@@ -1,5 +1,5 @@
 import { SpotStatus, BookingStatus } from "../../types";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where, doc, updateDoc, Timestamp, getDoc, arrayUnion } from "firebase/firestore";
 import { db } from "./Firebase";
 
 // Helper to generate spots for a lot
@@ -471,20 +471,14 @@ export const submitRatingForBooking = (bookingId, lotId, newRating) => {
 };
 
 // --- Firestore Booking Functions ---
-import {
-  addDoc,
-  query,
-  where,
-  doc,
-  updateDoc,
-  Timestamp,
-} from "firebase/firestore";
 
-// Add a new booking for a user after successful payment
-export const addBookingToFirestore = async (uid, bookingData) => {
+// Add a new booking to user's history after successful payment
+export const addBookingToUserHistory = async (uid, bookingData) => {
   try {
-    const bookingRef = collection(db, "users", uid, "bookings");
-    const docRef = await addDoc(bookingRef, {
+    const userRef = doc(db, "users", uid);
+    
+    // Create the booking entry for history
+    const bookingEntry = {
       areaId: bookingData.areaId,
       slotId: bookingData.slotId,
       startTime: Timestamp.fromDate(new Date(bookingData.startTime)),
@@ -492,62 +486,83 @@ export const addBookingToFirestore = async (uid, bookingData) => {
       createdAt: Timestamp.now(),
       paymentComplete: true,
       status: "active",
-      lotName: bookingData.lotName,
-      vehicleNumber: bookingData.vehicleNumber,
-      paymentMethod: bookingData.paymentMethod,
+    };
+
+    // Update the user document by appending to history array
+    await updateDoc(userRef, {
+      history: arrayUnion(bookingEntry)
     });
-    return { id: docRef.id, ...bookingData };
+
+    return { success: true, booking: bookingEntry };
   } catch (error) {
-    console.error("Error adding booking to Firestore:", error);
+    console.error("Error adding booking to user history:", error);
     throw error;
   }
 };
 
 // Get all bookings for a user (booking history)
-export const getBookingHistoryFromFirestore = async (uid) => {
+export const getUserBookingHistory = async (uid) => {
   try {
-    const snapshot = await getDocs(collection(db, "users", uid, "bookings"));
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      bookingTime: doc.data().createdAt?.toDate() || new Date(),
-    }));
+    const userRef = doc(db, "users", uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return userData.history || [];
+    }
+    return [];
   } catch (error) {
-    console.error("Error fetching booking history:", error);
+    console.error("Error fetching user booking history:", error);
     return [];
   }
 };
 
 // Get the active booking for a user
-export const getActiveBookingFromFirestore = async (uid) => {
+export const getActiveBookingFromUser = async (uid) => {
   try {
-    const q = query(
-      collection(db, "users", uid, "bookings"),
-      where("status", "==", "active")
-    );
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-    const doc = snapshot.docs[0];
-    return {
-      id: doc.id,
-      ...doc.data(),
-      bookingTime: doc.data().createdAt?.toDate() || new Date(),
-    };
+    const userRef = doc(db, "users", uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      const history = userData.history || [];
+      
+      // Find the most recent active booking
+      const activeBooking = history
+        .filter(booking => booking.status === "active")
+        .sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate())[0];
+      
+      return activeBooking || null;
+    }
+    return null;
   } catch (error) {
     console.error("Error fetching active booking:", error);
     return null;
   }
 };
 
-// Update booking status
-export const updateBookingStatusInFirestore = async (
+// Update booking status in user history
+export const updateBookingStatusInUserHistory = async (
   uid,
-  bookingId,
+  bookingIndex,
   newStatus
 ) => {
   try {
-    const bookingRef = doc(db, "users", uid, "bookings", bookingId);
-    await updateDoc(bookingRef, { status: newStatus });
+    const userRef = doc(db, "users", uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      const history = userData.history || [];
+      
+      if (history[bookingIndex]) {
+        history[bookingIndex].status = newStatus;
+        
+        await updateDoc(userRef, {
+          history: history
+        });
+      }
+    }
   } catch (error) {
     console.error("Error updating booking status:", error);
     throw error;

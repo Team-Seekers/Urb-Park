@@ -4,7 +4,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../services/Firebase";
 import { toast } from "react-toastify";
 
-const Header = ({ user, onLoginClick, onProtectedNav }) => {
+const Header = ({ user, isAdmin, onLoginClick, onProtectedNav }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -94,10 +94,10 @@ const Header = ({ user, onLoginClick, onProtectedNav }) => {
                   </li>
                   <li>
                     <button
-                      onClick={() => handleNavClick("/profile")}
+                      onClick={() => handleNavClick(isAdmin ? "/admin" : "/profile")}
                       className={inactiveLinkClass}
                     >
-                      My Bookings
+                      {isAdmin ? "Admin Dashboard" : "My Bookings"}
                     </button>
                   </li>
                 </ul>
@@ -243,10 +243,10 @@ const Header = ({ user, onLoginClick, onProtectedNav }) => {
               List Your Space
             </button>
             <button
-              onClick={() => handleNavClick("/profile")}
+              onClick={() => handleNavClick(isAdmin ? "/admin" : "/profile")}
               className={`${mobileLinkBaseClass} ${mobileInactiveLinkClass}`}
             >
-              My Bookings
+              {isAdmin ? "Admin Dashboard" : "My Bookings"}
             </button>
           </nav>
 

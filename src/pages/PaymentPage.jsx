@@ -3,22 +3,24 @@ import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../hooks/useAppContext";
 import {
   getParkingLotById,
-  addBookingToFirestore,
+  addBookingToUserHistory,
 } from "../services/parkingService";
+import { initializePayment } from "../services/razorpayService";
 import Spinner from "../components/Spinner";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const PaymentPage = () => {
-  const { booking } = useAppContext();
+  const { booking, user } = useAppContext();
   const navigate = useNavigate();
   const [lot, setLot] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [paid, setPaid] = useState(false);
   const [error, setError] = useState("");
 
-  // Get current user ID (you'll need to implement this based on your auth system)
+  // Get current user ID from context
   const getCurrentUserId = () => {
-    // For now, using a mock user ID. Replace this with your actual auth user ID
-    return "user123"; // Replace with actual user ID from your auth system
+    return user?.uid;
   };
 
   useEffect(() => {
@@ -39,33 +41,72 @@ const PaymentPage = () => {
     setError("");
 
     try {
-      // Simulate payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // After successful payment, store booking in Firestore
       const uid = getCurrentUserId();
+      if (!uid) {
+        throw new Error("User not authenticated");
+      }
+
+      const amountToPay = isPayAsYouGo ? 100 : lot.pricePerHour;
+      
+      // Prepare booking data for Razorpay
       const bookingData = {
-        areaId: booking.lotId || "park1",
-        slotId: booking.spotId || "s1",
-        startTime: new Date("2025-08-31T11:00:00"),
-        endTime: new Date("2025-08-31T12:00:00"),
         lotName: booking.lotName,
+        lotId: booking.lotId,
+        spotId: booking.spotId,
         vehicleNumber: booking.vehicleNumber,
-        paymentMethod: booking.paymentMethod,
+        customerName: user?.displayName || "Customer",
+        customerEmail: user?.email || "customer@example.com",
+        customerPhone: user?.phoneNumber || "",
+        amount: amountToPay,
+        uid: uid,
       };
 
-      await addBookingToFirestore(uid, bookingData);
+      // Initialize Razorpay payment
+      await initializePayment(
+        amountToPay,
+        bookingData,
+        // Success callback
+        async (paymentResponse, bookingData) => {
+          try {
+            // Payment successful - now add to database
+            const dbBookingData = {
+              areaId: bookingData.lotId,
+              slotId: bookingData.spotId,
+              startTime: new Date(),
+              endTime: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+              paymentId: paymentResponse.razorpay_payment_id,
+              orderId: paymentResponse.razorpay_order_id,
+            };
 
-      setProcessing(false);
-      setPaid(true);
+            await addBookingToUserHistory(bookingData.uid, dbBookingData);
+            
+            setProcessing(false);
+            setPaid(true);
+            toast.success("Payment successful! Booking confirmed.");
 
-      setTimeout(() => {
-        navigate("/ticket");
-      }, 2000);
+            setTimeout(() => {
+              navigate("/ticket");
+            }, 2000);
+          } catch (error) {
+            console.error("Failed to save booking to database:", error);
+            toast.error("Payment successful but failed to save booking. Please contact support.");
+            setProcessing(false);
+          }
+        },
+        // Failure callback
+        (errorMessage) => {
+          console.error("Payment failed:", errorMessage);
+          setError(errorMessage);
+          setProcessing(false);
+          toast.error(errorMessage);
+        }
+      );
+
     } catch (error) {
-      console.error("Payment or booking storage failed:", error);
-      setError("Payment failed. Please try again.");
+      console.error("Payment initialization failed:", error);
+      setError("Failed to initialize payment. Please try again.");
       setProcessing(false);
+      toast.error("Failed to initialize payment. Please try again.");
     }
   };
 
@@ -110,75 +151,78 @@ const PaymentPage = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-12 items-start">
-      {/* Order Summary */}
-      <div className="bg-white p-8 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-6 border-b pb-4 text-gray-900">
-          Order Summary
-        </h2>
-        <div className="space-y-4 text-gray-700">
-          <div className="flex justify-between">
-            <span>Parking Lot:</span>
-            <span className="font-semibold">{booking.lotName}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Assigned Spot:</span>
-            <span className="font-semibold">{booking.spotId}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Vehicle Number:</span>
-            <span className="font-semibold">{booking.vehicleNumber}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Payment Method:</span>
-            <span className="font-semibold capitalize">
-              {booking.paymentMethod.replace("_", " ").toLowerCase()}
-            </span>
-          </div>
-          {isPayAsYouGo && (
-            <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
-              A refundable deposit is required for Pay-as-you-go bookings. This
-              amount will be adjusted against your final bill.
+    <>
+      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-12 items-start">
+        {/* Order Summary */}
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h2 className="text-2xl font-bold mb-6 border-b pb-4 text-gray-900">
+            Order Summary
+          </h2>
+          <div className="space-y-4 text-gray-700">
+            <div className="flex justify-between">
+              <span>Parking Lot:</span>
+              <span className="font-semibold">{booking.lotName}</span>
             </div>
-          )}
-          <div className="border-t my-4"></div>
-          <div className="flex justify-between text-xl font-bold">
-            <span>
-              {isPayAsYouGo ? "Deposit Amount:" : "Total (per hour):"}
-            </span>
-            <span>₹{amountToPay.toFixed(2)}</span>
+            <div className="flex justify-between">
+              <span>Assigned Spot:</span>
+              <span className="font-semibold">{booking.spotId}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Vehicle Number:</span>
+              <span className="font-semibold">{booking.vehicleNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Payment Method:</span>
+              <span className="font-semibold capitalize">
+                {booking.paymentMethod.replace("_", " ").toLowerCase()}
+              </span>
+            </div>
+            {isPayAsYouGo && (
+              <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
+                A refundable deposit is required for Pay-as-you-go bookings. This
+                amount will be adjusted against your final bill.
+              </div>
+            )}
+            <div className="border-t my-4"></div>
+            <div className="flex justify-between text-xl font-bold">
+              <span>
+                {isPayAsYouGo ? "Deposit Amount:" : "Total (per hour):"}
+              </span>
+              <span>₹{amountToPay.toFixed(2)}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Payment Form */}
-      <div className="bg-white p-8 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-6 border-b pb-4 text-gray-900">
-          Confirm Payment
-        </h2>
-        <div className="space-y-6">
-          <p className="text-gray-600">
-            You will be redirected to our secure payment partner, Razorpay, to
-            complete your transaction. No card details are required on this
-            site.
-          </p>
-          <div className="pt-4">
-            <button
-              onClick={handlePayment}
-              disabled={processing}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400"
-            >
-              {processing
-                ? "Processing..."
-                : `Proceed to Pay ₹${amountToPay.toFixed(2)}`}
-            </button>
+        {/* Payment Form */}
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <h2 className="text-2xl font-bold mb-6 border-b pb-4 text-gray-900">
+            Confirm Payment
+          </h2>
+          <div className="space-y-6">
+            <p className="text-gray-600">
+              You will be redirected to our secure payment partner, Razorpay, to
+              complete your transaction. No card details are required on this
+              site.
+            </p>
+            <div className="pt-4">
+              <button
+                onClick={handlePayment}
+                disabled={processing}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400"
+              >
+                {processing
+                  ? "Processing..."
+                  : `Proceed to Pay ₹${amountToPay.toFixed(2)}`}
+              </button>
+            </div>
+            {error && (
+              <p className="text-red-500 text-sm text-center mt-2">{error}</p>
+            )}
           </div>
-          {error && (
-            <p className="text-red-500 text-sm text-center mt-2">{error}</p>
-          )}
         </div>
       </div>
-    </div>
+      <ToastContainer position="top-right" autoClose={3000} />
+    </>
   );
 };
 

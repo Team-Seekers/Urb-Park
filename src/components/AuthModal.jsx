@@ -3,16 +3,13 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
-<<<<<<< HEAD
   sendEmailVerification,
-=======
->>>>>>> adcc593 (Add Vite and build script)
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { toast } from "react-toastify";
 
-// IMPORTANT: This component assumes you have a `Firebase.js` file
-// that exports `auth` and `db` like this:
+// IMPORTANT: This component assumes you have a Firebase.js file
+// that exports auth and db like this:
 // import { getAuth } from "firebase/auth";
 // import { getFirestore } from "firebase/firestore";
 // import { initializeApp } from "firebase/app";
@@ -50,53 +47,20 @@ export default function AuthModal({ open, onClose, onSuccess }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, login.email, login.password);
-      toast.success("Login successful!");
-      onSuccess?.();
-      onClose();
-    } catch (err) {
-      
-    }
-    setLoading(false);
-  };
-
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    if (signup.password !== signup.confirmpassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    setLoading(true);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
+      const userCred = await signInWithEmailAndPassword(
         auth,
-        signup.email,
-        signup.password
+        login.email,
+        login.password
       );
-<<<<<<< HEAD
       toast.success("Login successful!");
       onSuccess?.();
       onClose();
-=======
-      const uid = userCredential.user.uid;
-      await setDoc(doc(db, "users", uid), {
-        username: signup.email.split("@")[0],
-        email: signup.email,
-        phone: signup.phoneno,
-        vehicles: [signup.vehicle],
-        history: [],
-        createdAt: new Date(),
-      });
-      toast.success("Signup successful! Please login.");
-      setTab("login");
->>>>>>> adcc593 (Add Vite and build script)
     } catch (err) {
       toast.error(err.message);
     }
     setLoading(false);
   };
 
-<<<<<<< HEAD
   const handleSignup = async (e) => {
     e.preventDefault();
   
@@ -120,9 +84,11 @@ export default function AuthModal({ open, onClose, onSuccess }) {
       await setDoc(doc(db, "users", uid), {
         createdAt: new Date(),
         email: signup.email,
-        name: nameFromEmail,
-        vehicleNumber: signup.vehicle,
-        bookings: [], // initialized empty
+        username: nameFromEmail,
+        phone: signup.phoneno,
+        role: "user",
+        history: [], // initialized empty
+        vehicles: signup.vehicle ? [signup.vehicle] : [],
       });
   
       toast.success("Signup successful! You are now logged in.");
@@ -133,13 +99,7 @@ export default function AuthModal({ open, onClose, onSuccess }) {
     }
     setLoading(false);
   };
-<<<<<<< HEAD
    
-=======
-
-=======
->>>>>>> adcc593 (Add Vite and build script)
->>>>>>> acb354c6cfd7d5e8a560d2e0412028697d1ca686
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -150,19 +110,11 @@ export default function AuthModal({ open, onClose, onSuccess }) {
     }
 
     try {
-      console.log("📩 Sending reset to:", resetEmail);
       await sendPasswordResetEmail(auth, resetEmail);
       toast.success("Password reset email sent! Check your inbox or spam.");
       setShowReset(false);
     } catch (err) {
-      console.error("❌ Reset error:", err.code, err.message);
-      if (err.code === "auth/user-not-found") {
-        toast.error("This email is not registered.");
-      } else if (err.code === "auth/invalid-email") {
-        toast.error("Invalid email address.");
-      } else {
-        toast.error(err.message);
-      }
+      toast.error(err.message);
     }
     setLoading(false);
   };
@@ -213,6 +165,7 @@ export default function AuthModal({ open, onClose, onSuccess }) {
             <input
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none transition-colors"
               type="email"
+              name="resetEmail"
               placeholder="Enter your email"
               value={resetEmail}
               onChange={(e) => setResetEmail(e.target.value)}
@@ -260,7 +213,6 @@ export default function AuthModal({ open, onClose, onSuccess }) {
             >
               {loading ? "Logging in..." : "Login"}
             </button>
-<<<<<<< HEAD
             <div className="flex justify-between items-center mt-2">
               <button
                 type="button"
@@ -283,15 +235,6 @@ export default function AuthModal({ open, onClose, onSuccess }) {
                 Forgot Password?
               </button>
             </div>
-=======
-            <button
-              type="button"
-              className="text-blue-600 underline text-sm"
-              onClick={() => setShowReset(true)}
-            >
-              Forgot Password?
-            </button>
->>>>>>> adcc593 (Add Vite and build script)
           </form>
         ) : (
           <form onSubmit={handleSignup} className="space-y-4">
@@ -308,7 +251,7 @@ export default function AuthModal({ open, onClose, onSuccess }) {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none transition-colors"
               type="tel"
               name="phoneno"
-              placeholder="Phone Number (+91...)"
+              placeholder="Phone Number (e.g. +911234567890)"
               value={signup.phoneno}
               onChange={handleSignupChange}
               required

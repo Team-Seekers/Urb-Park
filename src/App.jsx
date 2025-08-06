@@ -7,9 +7,7 @@ import HomePage from "./pages/HomePage";
 import FindParkingPage from "./pages/FindParkingPage";
 import BookingPage from "./pages/BookingPage";
 import TicketPage from "./pages/TicketPage";
-import ListSpacePage from "./pages/ListSpacePage";
 import ProfilePage from "./pages/ProfilePage";
-import AdminPage from "./pages/AdminPage";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import NotFoundPage from "./pages/NotFoundPage";
 import Chatbot from "./components/Chatbot";
@@ -40,11 +38,10 @@ const App = () => {
     setAuthModalOpen(false);
     if (user) {
       window.location.hash = `#${redirectPath}`;
-<<<<<<< HEAD
     }
-=======
-    } 
->>>>>>> adcc593 (Add Vite and build script)
+
+    
+
   };
 
   return (
@@ -122,16 +119,6 @@ const App = () => {
                 }
               />
               <Route
-                path="/list-space"
-                element={
-                  user ? (
-                    <ListSpacePage />
-                  ) : (
-                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
-                  )
-                }
-              />
-              <Route
                 path="/profile"
                 element={
                   user ? (
@@ -146,16 +133,6 @@ const App = () => {
                 element={
                   user ? (
                     <ManagerDashboard />
-                  ) : (
-                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
-                  )
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  user ? (
-                    <AdminPage />
                   ) : (
                     <HomePage user={user} onProtectedNav={handleProtectedNav} />
                   )
