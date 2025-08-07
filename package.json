@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup-parking": "node setup-parking-data.js",
+    "init-firestore": "node initialize-firestore.js"
   },
   "dependencies": {
     "@google/genai": "^1.11.0",
@@ -17,6 +19,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.536.0",
     "react": "^19.1.0",
+    "react-datepicker": "^8.4.0",
     "react-dom": "^19.1.0",
     "react-firebase-hooks": "^5.1.1",
     "react-leaflet": "^5.0.0",

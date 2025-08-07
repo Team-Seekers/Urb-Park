@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAppContext } from "../hooks/useAppContext";
 import {
-  getCompletedBookings,
+  getUserBookingHistory,
   submitRatingForBooking,
 } from "../services/parkingService";
 import InteractiveRating from "../components/InteractiveRating";
@@ -13,6 +13,7 @@ const ProfilePage = () => {
     booking: currentBooking,
     notifications,
     clearNotifications,
+    user
   } = useAppContext();
   /** @type {[any[], Function]} */
   const [pastBookings, setPastBookings] = useState([]);
@@ -21,24 +22,34 @@ const ProfilePage = () => {
   useEffect(() => {
     const fetchHistory = async () => {
       setLoadingHistory(true);
-      const completed = await getCompletedBookings();
+      if (!user) {
+        setPastBookings([]);
+        setLoadingHistory(false);
+        return;
+      }
+      const allBookings = await getUserBookingHistory(user.uid);
+      // Filter for completed bookings
+      const completed = allBookings.filter(b => b.status === "completed" || b.status === "COMPLETED");
       setPastBookings(
         completed.sort(
           (a, b) =>
-            new Date(b.bookingTime).getTime() -
-            new Date(a.bookingTime).getTime()
+            new Date(b.endTime?.toDate ? b.endTime.toDate() : b.endTime).getTime() -
+            new Date(a.endTime?.toDate ? a.endTime.toDate() : a.endTime).getTime()
         )
       );
       setLoadingHistory(false);
     };
     fetchHistory();
-  }, []);
+  }, [user]);
 
   const handleRateBooking = async (bookingId, lotId, rating) => {
     try {
-      await submitRatingForBooking(bookingId, lotId, rating);
+      // Find the booking index in pastBookings
+      const bookingIndex = pastBookings.findIndex((b) => b.id === bookingId);
+      if (bookingIndex === -1 || !user) throw new Error("Booking not found");
+      await submitRatingForBooking(user.uid, bookingIndex, lotId, rating);
       setPastBookings((prev) =>
-        prev.map((b) => (b.id === bookingId ? { ...b, rated: true } : b))
+        prev.map((b, idx) => (idx === bookingIndex ? { ...b, rated: true } : b))
       );
     } catch (error) {
       console.error("Failed to submit rating", error);

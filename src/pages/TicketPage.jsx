@@ -4,11 +4,11 @@ import { useAppContext } from "../hooks/useAppContext";
 import { BookingStatus } from "../../types";
 import QRCode from "../components/QRCode";
 import Spinner from "../components/Spinner";
-import { updateBookingStatus } from "../services/parkingService";
+import { updateBookingStatusInUserHistory, getUserBookingHistory } from "../services/parkingService";
 import Mapguider from "../components/Mapguider";
 
 const TicketPage = () => {
-  const { booking, setBooking } = useAppContext();
+  const { booking, setBooking, user } = useAppContext();
   const navigate = useNavigate();
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -17,42 +17,40 @@ const TicketPage = () => {
       navigate("/find");
       return;
     }
-
     if (booking.status === BookingStatus.CONFIRMED) {
       setStatusMessage("You'll be verified at the entry gate.");
     }
   }, [booking, navigate]);
 
-  const handleSimulateEntry = async () => {
-    if (booking) {
-      try {
-        const updatedBooking = await updateBookingStatus(
-          booking.id,
-          BookingStatus.ACTIVE
-        );
-        setBooking(updatedBooking);
+  // Helper to update booking status in Firestore and local state
+  const updateStatus = async (newStatus) => {
+    if (!user || !booking) return;
+    try {
+      // Fetch user booking history to find the index
+      const history = await getUserBookingHistory(user.uid);
+      const bookingIndex = history.findIndex(
+        (b) => b.areaId === booking.lotId && b.slotId === booking.spotId && b.startTime.toDate().getTime() === new Date(booking.startTime).getTime()
+      );
+      if (bookingIndex === -1) throw new Error("Booking not found in user history.");
+      await updateBookingStatusInUserHistory(user.uid, bookingIndex, newStatus);
+      // Update local booking state
+      setBooking({ ...booking, status: newStatus });
+      if (newStatus === BookingStatus.ACTIVE) {
         setStatusMessage("Welcome! Your parking session has started.");
-      } catch (e) {
-        setStatusMessage("Error starting session.");
+      } else if (newStatus === BookingStatus.COMPLETED) {
+        setStatusMessage("Your session is complete. Thank you for parking with us!");
       }
+    } catch (e) {
+      setStatusMessage("Error updating session status.");
     }
   };
 
+  const handleSimulateEntry = async () => {
+    await updateStatus(BookingStatus.ACTIVE);
+  };
+
   const handleSimulateExit = async () => {
-    if (booking) {
-      try {
-        const updatedBooking = await updateBookingStatus(
-          booking.id,
-          BookingStatus.COMPLETED
-        );
-        setBooking(updatedBooking);
-        setStatusMessage(
-          "Your session is complete. Thank you for parking with us!"
-        );
-      } catch (error) {
-        setStatusMessage("Error completing session.");
-      }
-    }
+    await updateStatus(BookingStatus.COMPLETED);
   };
 
   const getStatusUI = () => {

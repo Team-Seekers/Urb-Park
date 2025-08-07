@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import {
-  getParkingLots,
   getNearbyParkingAreas,
   fetchAllParkingAreas,
 } from "../services/parkingService";
@@ -32,9 +31,18 @@ const FindParkingPage = () => {
 
   const fetchData = async (isInitialLoad = false) => {
     if (isInitialLoad) setLoading(true);
-    const data = await getParkingLots();
-    setLots(data);
-    if (isInitialLoad) setLoading(false);
+    try {
+      console.log("🔍 Fetching parking data...");
+      const data = await fetchAllParkingAreas();
+      console.log("📊 Received parking data:", data);
+      console.log("📊 Number of parking areas:", data.length);
+      setLots(data);
+      if (isInitialLoad) setLoading(false);
+    } catch (error) {
+      console.error("❌ Error fetching parking data:", error);
+      setError("Failed to fetch parking data");
+      if (isInitialLoad) setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -47,14 +55,14 @@ const FindParkingPage = () => {
     let results = lots.filter(
       (lot) =>
         (lot.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          lot.address.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        lot.pricePerHour <= priceFilter &&
-        lot.rating >= ratingFilter
+          (lot.address || lot.location || "").toLowerCase().includes(searchTerm.toLowerCase())) &&
+        (lot.pricePerHour || 0) <= priceFilter &&
+        (lot.rating || 0) >= ratingFilter
     );
 
     if (featuresFilter.length > 0) {
       results = results.filter((lot) =>
-        featuresFilter.every((feature) => lot.features.includes(feature))
+        featuresFilter.every((feature) => (lot.features || []).includes(feature))
       );
     }
     setFilteredLots(results);
@@ -72,38 +80,9 @@ const FindParkingPage = () => {
     try {
       setNearbyLoading(true);
       setShowNearbyOnly(true);
-
       const nearbyAreas = await getNearbyParkingAreas(5); // 5km radius
-
-      // Convert Firestore data to match the expected format
-      const convertedAreas = nearbyAreas.map((area) => ({
-        id: area.id,
-        name: area.name,
-        address: area.location,
-        lat: area.lat,
-        lng: area.lng,
-        distance: area.distance,
-        totalSpots: 50, // Default values since not in Firestore
-        availableSpots: 30,
-        pricePerHour: 50,
-        rating: 4.0,
-        reviewCount: 25,
-        features: ["Covered", "24/7 Security", "Mobile Pass"],
-        image:
-          "https://picsum.photos/400/300?random=" +
-          Math.floor(Math.random() * 100),
-        spots: [],
-        status: "active",
-        ownerId: "firestore-owner",
-        verificationChecks: {
-          cameraFixed: true,
-          apiIntegrated: true,
-          rehearsalComplete: true,
-        },
-      }));
-
-      setLots(convertedAreas);
-      setFilteredLots(convertedAreas);
+      setLots(nearbyAreas);
+      setFilteredLots(nearbyAreas);
     } catch (error) {
       console.error("Error fetching nearby parking:", error);
       alert(
@@ -121,49 +100,18 @@ const FindParkingPage = () => {
 
   const handleSearchParking = async () => {
     if (!searchTerm.trim()) return;
-
     try {
       setSearchLoading(true);
       setShowNearbyOnly(false);
-
       const allAreas = await fetchAllParkingAreas();
-
       // Filter areas by search term
       const matchingAreas = allAreas.filter(
         (area) =>
           area.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          area.location.toLowerCase().includes(searchTerm.toLowerCase())
+          (area.address || area.location || "").toLowerCase().includes(searchTerm.toLowerCase())
       );
-
-      // Convert Firestore data to match the expected format
-      const convertedAreas = matchingAreas.map((area) => ({
-        id: area.id,
-        name: area.name,
-        address: area.location,
-        lat: area.lat || 0,
-        lng: area.lng || 0,
-        distance: 0, // No distance calculation for search
-        totalSpots: 50,
-        availableSpots: 30,
-        pricePerHour: 50,
-        rating: 4.0,
-        reviewCount: 25,
-        features: ["Covered", "24/7 Security", "Mobile Pass"],
-        image:
-          "https://picsum.photos/400/300?random=" +
-          Math.floor(Math.random() * 100),
-        spots: [],
-        status: "active",
-        ownerId: "firestore-owner",
-        verificationChecks: {
-          cameraFixed: true,
-          apiIntegrated: true,
-          rehearsalComplete: true,
-        },
-      }));
-
-      setLots(convertedAreas);
-      setFilteredLots(convertedAreas);
+      setLots(matchingAreas);
+      setFilteredLots(matchingAreas);
     } catch (error) {
       console.error("Error searching parking areas:", error);
       alert("Could not search parking areas. Please try again.");

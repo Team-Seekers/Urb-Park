@@ -1,5 +1,5 @@
 import { SpotStatus, BookingStatus } from "../../types";
-import { collection, getDocs, addDoc, query, where, doc, updateDoc, Timestamp, getDoc, arrayUnion } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where, doc, updateDoc, Timestamp, getDoc, arrayUnion, deleteDoc, setDoc } from "firebase/firestore";
 import { db } from "./Firebase";
 
 // Helper to generate spots for a lot
@@ -72,10 +72,44 @@ export const parseCoordinates = (coordStr) => {
 export const fetchAllParkingAreas = async () => {
   try {
     const querySnapshot = await getDocs(collection(db, "parkingAreas"));
-    return querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const parkingAreas = querySnapshot.docs.map((doc) => {
+      const data = doc.data();
+      console.log("Raw Firestore data:", data); // Debug log
+      
+      // Parse coordinates from the actual Firestore format
+      let coordinates = [0, 0];
+      if (data.coordinatess) {
+        // Handle the geopoint format from Firestore
+        if (Array.isArray(data.coordinatess)) {
+          coordinates = data.coordinatess;
+        } else if (data.coordinatess.latitude && data.coordinatess.longitude) {
+          coordinates = [data.coordinatess.latitude, data.coordinatess.longitude];
+        }
+      }
+      
+      return {
+        id: doc.id, // Use the actual document ID (e.g., "delhiCentralLot", "mumbaiLot")
+        name: data.name || `Parking ${doc.id}`, // Use document ID as fallback name
+        address: data.address || "Address not available",
+        coordinates: coordinates,
+        availableSpots: data.availableSpots || 0,
+        totalSpots: data.totalSpots || data.availableSpots || 50, // Use availableSpots as fallback
+        pricePerHour: data.pricePerHour || 50,
+        rating: data.rating || 4.0,
+        reviewCount: data.reviewCount || 0,
+        features: data.features || ["Covered", "24/7 Security", "Mobile Pass"],
+        status: data.status || "Active",
+        image: data.image || `https://picsum.photos/400/300?random=${doc.id}`,
+        slots: data.slots || {},
+        createdAt: data.createdAt || new Date(),
+        // Add distance calculation if coordinates are available
+        lat: coordinates[0],
+        lng: coordinates[1]
+      };
+    });
+    
+    console.log("Processed parking areas:", parkingAreas); // Debug log
+    return parkingAreas;
   } catch (error) {
     console.error("Error fetching parking areas:", error);
     return [];
@@ -145,337 +179,241 @@ export const getNearbyParkingAreas = async (maxDistance = 5) => {
   }
 };
 
-let MOCK_PARKING_LOTS = [
-  {
-    id: "lot-a1",
-    name: "EcoPark Downtown",
-    address: "Tambaram",
-    lat: 13.0827,
-    lng: 80.2707,
-    distance: 1.2,
-    totalSpots: 80,
-    availableSpots: 65,
-    pricePerHour: 50,
-    rating: 4.5,
-    reviewCount: 52,
-    features: ["EV Charging", "Covered", "24/7 Security", "Mobile Pass"],
-    image: "https://picsum.photos/400/300?random=1",
-    spots: generateSpots(80),
-    status: "active",
-    ownerId: "manager-001",
-    verificationChecks: {
-      cameraFixed: true,
-      apiIntegrated: true,
-      rehearsalComplete: true,
-    },
-  },
-  {
-    id: "lot-b2",
-    name: "City Center Garage",
-    address: "Delhi",
-    lat: 28.6448,
-    lng: 77.2167,
-    distance: 2.5,
-    totalSpots: 150,
-    availableSpots: 45,
-    pricePerHour: 60,
-    rating: 4.2,
-    reviewCount: 128,
-    features: ["Covered", "Valet", "24/7 Access"],
-    image: "https://picsum.photos/400/300?random=2",
-    spots: generateSpots(150),
-    status: "active",
-    ownerId: "system-user",
-    verificationChecks: {
-      cameraFixed: true,
-      apiIntegrated: true,
-      rehearsalComplete: true,
-    },
-  },
-  // Add a pending one for the AdminPage to display
-  {
-    id: "lot-pending-1",
-    name: "Jane's Driveway",
-    address: "Tambaram",
-    lat: 13.0827,
-    lng: 80.2707,
-    distance: 0,
-    totalSpots: 2,
-    availableSpots: 2,
-    pricePerHour: 75,
-    rating: 0,
-    reviewCount: 0,
-    features: ["Mobile Pass"],
-    image: "httpsum.photos/400/300?random=5",
-    spots: generateSpots(2),
-    status: "pending",
-    ownerId: "user-to-be-manager",
-    verificationChecks: {
-      cameraFixed: false,
-      apiIntegrated: false,
-      rehearsalComplete: false,
-    },
-  },
-];
+// --- Firestore-based Parking and Booking Functions ---
 
-// Initialize available spots count
-MOCK_PARKING_LOTS.forEach((lot) => {
-  lot.availableSpots = lot.spots.filter(
-    (s) => s.status === SpotStatus.AVAILABLE
-  ).length;
-});
-
-let MOCK_BOOKINGS = [];
-
-export const getParkingLots = () => {
-  return new Promise((resolve) => {
-    // Ensure available spots count is up-to-date
-    MOCK_PARKING_LOTS.forEach((lot) => {
-      lot.availableSpots = lot.spots.filter(
-        (s) => s.status === SpotStatus.AVAILABLE
-      ).length;
-    });
-    const activeLots = MOCK_PARKING_LOTS.filter(
-      (lot) => lot.status === "active"
-    );
-    setTimeout(() => resolve([...activeLots]), 500);
-  });
-};
-
-export const getParkingLotById = (id) => {
-  return new Promise((resolve) => {
-    setTimeout(
-      () => resolve(MOCK_PARKING_LOTS.find((lot) => lot.id === id)),
-      300
-    );
-  });
-};
-
-export const getPendingSubmissions = () => {
-  return new Promise((resolve) => {
-    const pendingLots = MOCK_PARKING_LOTS.filter(
-      (lot) => lot.status === "pending"
-    );
-    setTimeout(() => resolve([...pendingLots]), 500);
-  });
-};
-
-export const submitNewLot = (lotData) => {
-  return new Promise((resolve) => {
-    const newLot = {
-      id: `lot-pending-${Date.now()}`,
-      name: lotData.name,
-      address: lotData.address,
-      lat: lotData.lat,
-      lng: lotData.lng,
-      distance: 0,
-      totalSpots: lotData.spots,
-      availableSpots: lotData.spots,
-      pricePerHour: 65, // Default price
-      rating: 0,
-      reviewCount: 0,
-      features: ["Mobile Pass", "24/7 Access"],
-      image: `https://picsum.photos/400/300?random=${Date.now()}`,
-      spots: generateSpots(lotData.spots),
-      status: "pending",
-      ownerId: "submitted-user", // Mock owner ID
-      verificationChecks: {
-        cameraFixed: false,
-        apiIntegrated: false,
-        rehearsalComplete: false,
-      },
-    };
-    MOCK_PARKING_LOTS.push(newLot);
-    setTimeout(() => resolve(newLot), 700);
-  });
-};
-
-export const updateLotDetails = (lotId, details) => {
-  return new Promise((resolve, reject) => {
-    const lotIndex = MOCK_PARKING_LOTS.findIndex((lot) => lot.id === lotId);
-    if (lotIndex === -1) {
-      return reject(new Error("Lot not found to update."));
+// Helper: Check if time overlaps with existing bookings
+export function isOverlapping(existingBookings, newStart, newEnd) {
+  for (const booking of existingBookings) {
+    const start = booking.startTime.toDate ? booking.startTime.toDate() : new Date(booking.startTime);
+    const end = booking.endTime.toDate ? booking.endTime.toDate() : new Date(booking.endTime);
+    if (
+      (newStart >= start && newStart < end) || // Starts in between
+      (newEnd > start && newEnd <= end) ||     // Ends in between
+      (newStart <= start && newEnd >= end)     // Fully overlaps
+    ) {
+      return true;
     }
+  }
+  return false;
+}
 
-    const originalLot = MOCK_PARKING_LOTS[lotIndex];
-
-    // Check if totalSpots has changed, if so, regenerate spots array
-    if (details.totalSpots && details.totalSpots !== originalLot.totalSpots) {
-      originalLot.spots = generateSpots(details.totalSpots);
-      originalLot.availableSpots = details.totalSpots; // Assuming all new spots are available
+// Fetch slots for a parking area from Firestore
+export async function fetchSlotsForParkingArea(parkingId) {
+  try {
+    // Get parking area document
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    
+    if (!parkingDoc.exists()) {
+      console.log("Parking area not found:", parkingId);
+      return {};
     }
-
-    // Update the lot with new details
-    MOCK_PARKING_LOTS[lotIndex] = { ...originalLot, ...details };
-
-    setTimeout(() => resolve({ ...MOCK_PARKING_LOTS[lotIndex] }), 300);
-  });
-};
-
-export const updateLotVerificationCheck = (lotId, check, value) => {
-  return new Promise((resolve, reject) => {
-    const lotIndex = MOCK_PARKING_LOTS.findIndex((lot) => lot.id === lotId);
-    if (lotIndex === -1) {
-      return reject(new Error("Lot not found to update verification."));
+    
+    const parkingData = parkingDoc.data();
+    const totalSpots = parkingData.totalSpots || parkingData.availableSpots || 20;
+    const slotsData = parkingData.slots || {};
+    
+    // Generate slots based on totalSpots, using existing slots data if available
+    const slotBookings = {};
+    
+    // Create dynamic slot names based on total spots
+    for (let i = 1; i <= totalSpots; i++) {
+      const slotId = `slot${i}`;
+      const existingSlotData = slotsData[slotId] || [];
+      
+      slotBookings[slotId] = existingSlotData;
     }
-    const lot = MOCK_PARKING_LOTS[lotIndex];
-    lot.verificationChecks[check] = value;
-    setTimeout(() => resolve({ ...lot }), 300);
-  });
-};
+    
+    console.log("Slot bookings for parking area:", slotBookings);
+    return slotBookings;
+  } catch (error) {
+    console.error("Error fetching slots for parking area:", error);
+    return {};
+  }
+}
 
-export const approveSubmission = (lotId) => {
-  return new Promise((resolve, reject) => {
-    const lotIndex = MOCK_PARKING_LOTS.findIndex((lot) => lot.id === lotId);
-    if (lotIndex === -1) {
-      return reject(new Error("Lot not found to approve."));
-    }
-
-    MOCK_PARKING_LOTS[lotIndex].status = "active";
-    console.log(`Lot ${lotId} has been manually approved.`);
-
-    setTimeout(() => resolve({ ...MOCK_PARKING_LOTS[lotIndex] }), 300);
-  });
-};
-
-export const rejectSubmission = (lotId) => {
-  return new Promise((resolve, reject) => {
-    const initialLength = MOCK_PARKING_LOTS.length;
-    MOCK_PARKING_LOTS = MOCK_PARKING_LOTS.filter((lot) => lot.id !== lotId);
-    if (MOCK_PARKING_LOTS.length === initialLength) {
-      return reject(new Error("Lot not found to reject."));
-    }
-    setTimeout(() => resolve({ success: true }), 300);
-  });
-};
-
-export const createBooking = (lotId, spotId, vehicleNumber, paymentMethod) => {
-  return new Promise((resolve, reject) => {
-    const lotIndex = MOCK_PARKING_LOTS.findIndex((p) => p.id === lotId);
-    if (lotIndex === -1) {
-      return reject(new Error("Parking lot not found."));
-    }
-    const lot = MOCK_PARKING_LOTS[lotIndex];
-    const spotIndex = lot.spots.findIndex((s) => s.id === spotId);
-
-    if (spotIndex === -1) {
-      return reject(new Error("Selected spot not found."));
-    }
-
-    const selectedSpot = lot.spots[spotIndex];
-
-    if (selectedSpot.status !== SpotStatus.AVAILABLE) {
-      return reject(
-        new Error(
-          "Sorry, this spot is no longer available. Please select another one."
-        )
-      );
-    }
-
-    // Update spot and lot
-    selectedSpot.status = SpotStatus.OCCUPIED;
-    lot.availableSpots--;
-
-    const newBooking = {
-      id: `BK-${Date.now()}`,
-      lotId,
-      lotName: lot.name,
-      lotLat: lot.lat,
-      lotLng: lot.lng,
-      spotId: selectedSpot.id,
-      vehicleNumber,
-      bookingTime: new Date(),
-      status: BookingStatus.CONFIRMED,
-      paymentMethod,
-      rated: false,
-    };
-
-    selectedSpot.bookingId = newBooking.id;
-    MOCK_BOOKINGS.unshift(newBooking); // Add to our "database"
-    setTimeout(() => resolve(newBooking), 1000);
-  });
-};
-
-export const getBookingsByLotId = (lotId) => {
-  return new Promise((resolve) => {
-    const bookings = MOCK_BOOKINGS.filter((b) => b.lotId === lotId);
-    setTimeout(() => resolve(bookings), 400);
-  });
-};
-
-export const updateBookingStatus = (bookingId, status) => {
-  return new Promise((resolve, reject) => {
-    const bookingIndex = MOCK_BOOKINGS.findIndex((b) => b.id === bookingId);
-    if (bookingIndex === -1) {
-      return reject(new Error("Booking not found"));
-    }
-    const booking = MOCK_BOOKINGS[bookingIndex];
-    booking.status = status;
-
-    const lot = MOCK_PARKING_LOTS.find((l) => l.id === booking.lotId);
-    if (lot) {
-      const spot = lot.spots.find((s) => s.bookingId === bookingId);
-      if (spot) {
-        if (status === BookingStatus.ACTIVE) {
-          spot.status = SpotStatus.OCCUPIED;
-        } else if (
-          status === BookingStatus.CANCELLED ||
-          status === BookingStatus.COMPLETED
-        ) {
-          spot.status = SpotStatus.AVAILABLE;
-          spot.bookingId = undefined;
-        }
+// Book a parking slot for a specific time range
+export async function bookParkingSlot(parkingId, slotId, bookingData) {
+  try {
+    // Check for overlapping bookings first
+    const existingBookings = await fetchSlotsForParkingArea(parkingId);
+    const slotBookings = existingBookings[slotId] || [];
+    
+    const newStart = new Date(bookingData.startTime);
+    const newEnd = new Date(bookingData.endTime);
+    
+    // Check for overlaps
+    for (const booking of slotBookings) {
+      const bookingStart = new Date(booking.startTime);
+      const bookingEnd = new Date(booking.endTime);
+      
+      if (
+        (newStart >= bookingStart && newStart < bookingEnd) || // Starts in between
+        (newEnd > bookingStart && newEnd <= bookingEnd) ||     // Ends in between
+        (newStart <= bookingStart && newEnd >= bookingEnd)     // Fully overlaps
+      ) {
+        throw new Error("Slot already booked for selected time.");
       }
     }
-
-    setTimeout(() => resolve(booking), 200);
-  });
-};
-
-export const getCompletedBookings = () => {
-  return new Promise((resolve) => {
-    const completed = MOCK_BOOKINGS.filter(
-      (b) => b.status === BookingStatus.COMPLETED
-    );
-    setTimeout(() => resolve([...completed]), 300);
-  });
-};
-
-export const submitRatingForBooking = (bookingId, lotId, newRating) => {
-  return new Promise((resolve, reject) => {
-    const lotIndex = MOCK_PARKING_LOTS.findIndex((l) => l.id === lotId);
-    if (lotIndex === -1) {
-      return reject(new Error("Parking lot not found."));
+    
+    // Create new booking data for the slots field
+    const bookingDoc = {
+      userId: bookingData.userId,
+      vehicleNumber: bookingData.vehicleNumber,
+      startTime: bookingData.startTime,
+      endTime: bookingData.endTime,
+      status: bookingData.status || "active",
+      paymentComplete: bookingData.paymentComplete || false,
+      createdAt: Timestamp.now()
+    };
+    
+    // Update the parking area's slots field directly
+    await updateParkingAreaSlots(parkingId, slotId, bookingDoc);
+    
+    // Also add to user's history if user ID is provided
+    if (bookingData.userId && bookingData.userId !== "guest") {
+      try {
+        await addBookingToUserHistory(bookingData.userId, {
+          areaId: parkingId,
+          slotId: slotId,
+          startTime: bookingData.startTime,
+          endTime: bookingData.endTime,
+          vehicleNumber: bookingData.vehicleNumber
+        });
+      } catch (historyError) {
+        console.warn("Could not add to user history:", historyError);
+      }
     }
-    const lot = MOCK_PARKING_LOTS[lotIndex];
+    
+    return { success: true, message: `Booked ${slotId} successfully.` };
+  } catch (error) {
+    console.error("Error booking parking slot:", error);
+    throw error;
+  }
+}
 
-    const bookingIndex = MOCK_BOOKINGS.findIndex((b) => b.id === bookingId);
-    if (bookingIndex === -1) {
-      return reject(new Error("Booking not found."));
+// Book a parking slot after successful payment (skips overlap check)
+export async function bookParkingSlotAfterPayment(parkingId, slotId, bookingData) {
+  try {
+    console.log("Booking slot after payment:", { parkingId, slotId, bookingData });
+    
+    // Create new booking data for the slots field
+    const bookingDoc = {
+      userId: bookingData.userId,
+      vehicleNumber: bookingData.vehicleNumber,
+      startTime: bookingData.startTime,
+      endTime: bookingData.endTime,
+      status: bookingData.status || "active",
+      paymentComplete: bookingData.paymentComplete || false,
+      paymentId: bookingData.paymentId,
+      orderId: bookingData.orderId,
+      createdAt: Timestamp.now()
+    };
+    
+    // Update the parking area's slots field directly
+    await updateParkingAreaSlots(parkingId, slotId, bookingDoc);
+    
+    console.log("Successfully booked slot after payment");
+    return { success: true, message: `Booked ${slotId} successfully after payment.` };
+  } catch (error) {
+    console.error("Error booking parking slot after payment:", error);
+    throw error;
+  }
+}
+
+// Update parking area's slots field when a booking is made
+export async function updateParkingAreaSlots(parkingId, slotId, bookingData) {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    
+    if (!parkingDoc.exists()) {
+      throw new Error("Parking area not found");
     }
-    const booking = MOCK_BOOKINGS[bookingIndex];
-    if (booking.rated) {
-      return reject(new Error("This booking has already been rated."));
+    
+    const parkingData = parkingDoc.data();
+    const currentSlots = parkingData.slots || {};
+    
+    // Initialize slot array if it doesn't exist
+    if (!currentSlots[slotId]) {
+      currentSlots[slotId] = [];
     }
+    
+    // Add the new booking to the slot
+    currentSlots[slotId].push({
+      userId: bookingData.userId,
+      vehicleNumber: bookingData.vehicleNumber,
+      startTime: bookingData.startTime,
+      endTime: bookingData.endTime,
+      createdAt: bookingData.createdAt,
+      paymentComplete: bookingData.paymentComplete,
+      status: bookingData.status,
+      paymentId: bookingData.paymentId,
+      orderId: bookingData.orderId
+    });
+    
+    // Update the parking area document
+    await updateDoc(parkingRef, {
+      slots: currentSlots,
+      availableSpots: Math.max(0, (parkingData.availableSpots || 0) - 1)
+    });
+    
+    console.log(`Updated slots for parking area ${parkingId}, slot ${slotId}`);
+  } catch (error) {
+    console.error("Error updating parking area slots:", error);
+    throw error;
+  }
+}
 
-    // Update lot rating
-    const totalRating = lot.rating * lot.reviewCount;
-    lot.reviewCount++;
-    lot.rating = (totalRating + newRating) / lot.reviewCount;
-
-    // Update booking status
-    booking.rated = true;
-
-    setTimeout(() => resolve({ ...booking }), 500);
-  });
-};
+// Get slot status for a given time range (returns 'booked' if overlap, else 'available')
+export function getSlotStatusForTime(existingBookings, startTime, endTime) {
+  if (!startTime || !endTime || !existingBookings || existingBookings.length === 0) {
+    return "available";
+  }
+  
+  const newStart = new Date(startTime);
+  const newEnd = new Date(endTime);
+  
+  for (const booking of existingBookings) {
+    const bookingStart = new Date(booking.startTime);
+    const bookingEnd = new Date(booking.endTime);
+    
+    if (
+      (newStart >= bookingStart && newStart < bookingEnd) || // Starts in between
+      (newEnd > bookingStart && newEnd <= bookingEnd) ||     // Ends in between
+      (newStart <= bookingStart && newEnd >= bookingEnd)     // Fully overlaps
+    ) {
+      return "booked";
+    }
+  }
+  
+  return "available";
+}
 
 // --- Firestore Booking Functions ---
 
 // Add a new booking to user's history after successful payment
 export const addBookingToUserHistory = async (uid, bookingData) => {
   try {
+    console.log("Adding booking to user history:", { uid, bookingData });
+    
+    if (!uid || uid === "guest") {
+      throw new Error("Invalid user ID");
+    }
+    
     const userRef = doc(db, "users", uid);
+    
+    // Check if user document exists
+    const userDoc = await getDoc(userRef);
+    if (!userDoc.exists()) {
+      console.log("User document doesn't exist, creating new user document");
+      // Create user document if it doesn't exist
+      await setDoc(userRef, {
+        uid: uid,
+        history: [],
+        createdAt: Timestamp.now()
+      });
+    }
     
     // Create the booking entry for history
     const bookingEntry = {
@@ -486,16 +424,29 @@ export const addBookingToUserHistory = async (uid, bookingData) => {
       createdAt: Timestamp.now(),
       paymentComplete: true,
       status: "active",
+      paymentId: bookingData.paymentId,
+      orderId: bookingData.orderId,
+      vehicleNumber: bookingData.vehicleNumber
     };
+
+    console.log("Booking entry to add:", bookingEntry);
 
     // Update the user document by appending to history array
     await updateDoc(userRef, {
       history: arrayUnion(bookingEntry)
     });
 
+    console.log("Successfully added booking to user history");
     return { success: true, booking: bookingEntry };
   } catch (error) {
     console.error("Error adding booking to user history:", error);
+    
+    // If it's a permissions error, log it but don't throw
+    if (error.message.includes("Missing or insufficient permissions")) {
+      console.warn("Firestore permissions issue - booking will still be saved to parking area");
+      return { success: false, error: "User history not saved due to permissions" };
+    }
+    
     throw error;
   }
 };
@@ -567,4 +518,340 @@ export const updateBookingStatusInUserHistory = async (
     console.error("Error updating booking status:", error);
     throw error;
   }
+};
+
+// --- Firestore-based rating function ---
+
+/**
+ * Submit a rating for a completed booking.
+ * @param {string} userId - The user's UID
+ * @param {number} bookingIndex - The index of the booking in the user's history
+ * @param {string} lotId - The parking lot ID
+ * @param {number} newRating - The new rating value
+ */
+export const submitRatingForBooking = async (userId, bookingIndex, lotId, newRating) => {
+  // Update booking as rated in user history
+  const userRef = doc(db, "users", userId);
+  const userDoc = await getDoc(userRef);
+  if (!userDoc.exists()) throw new Error("User not found");
+  const userData = userDoc.data();
+  const history = userData.history || [];
+  if (!history[bookingIndex]) throw new Error("Booking not found");
+  if (history[bookingIndex].rated) throw new Error("This booking has already been rated.");
+  history[bookingIndex].rated = true;
+  await updateDoc(userRef, { history });
+
+  // Update lot rating
+  const lotRef = doc(db, "parkingAreas", lotId);
+  const lotDoc = await getDoc(lotRef);
+  if (!lotDoc.exists()) throw new Error("Parking lot not found");
+  const lotData = lotDoc.data();
+  const reviewCount = lotData.reviewCount || 0;
+  const rating = lotData.rating || 0;
+  const newReviewCount = reviewCount + 1;
+  const newAvgRating = (rating * reviewCount + newRating) / newReviewCount;
+  await updateDoc(lotRef, {
+    reviewCount: newReviewCount,
+    rating: newAvgRating,
+  });
+  return { success: true };
+};
+
+/**
+ * Fetch a single parking area by its ID from Firestore.
+ * @param {string} parkingId
+ * @returns {Promise<Object|null>}
+ */
+export const fetchParkingAreaById = async (parkingId) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingSnap = await getDoc(parkingRef);
+    if (!parkingSnap.exists()) return null;
+    return { id: parkingSnap.id, ...parkingSnap.data() };
+  } catch (error) {
+    console.error("Error fetching parking area by ID:", error);
+    return null;
+  }
+};
+
+// --- Comprehensive Firestore Data Management Functions ---
+
+// Create a new parking area
+export const createParkingArea = async (parkingData) => {
+  try {
+    const docRef = await addDoc(collection(db, "parkingAreas"), {
+      ...parkingData,
+      createdAt: Timestamp.now(),
+      status: "Active",
+      availableSpots: parkingData.totalSpots || 0,
+      slots: {}
+    });
+    return { id: docRef.id, ...parkingData };
+  } catch (error) {
+    console.error("Error creating parking area:", error);
+    throw error;
+  }
+};
+
+// Update parking area details
+export const updateParkingArea = async (parkingId, updateData) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    await updateDoc(parkingRef, {
+      ...updateData,
+      updatedAt: Timestamp.now()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating parking area:", error);
+    throw error;
+  }
+};
+
+// Delete parking area
+export const deleteParkingArea = async (parkingId) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    await deleteDoc(parkingRef);
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting parking area:", error);
+    throw error;
+  }
+};
+
+// Add slots to a parking area
+export const addSlotsToParkingArea = async (parkingId, slotIds) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    if (!parkingDoc.exists()) throw new Error("Parking area not found");
+    
+    const currentData = parkingDoc.data();
+    const currentSlots = currentData.slots || {};
+    
+    // Add new slots
+    slotIds.forEach(slotId => {
+      if (!currentSlots[slotId]) {
+        currentSlots[slotId] = [];
+      }
+    });
+    
+    await updateDoc(parkingRef, {
+      slots: currentSlots,
+      totalSpots: Object.keys(currentSlots).length,
+      availableSpots: Object.keys(currentSlots).length
+    });
+    
+    return { success: true, slots: currentSlots };
+  } catch (error) {
+    console.error("Error adding slots:", error);
+    throw error;
+  }
+};
+
+// Remove slots from a parking area
+export const removeSlotsFromParkingArea = async (parkingId, slotIds) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    if (!parkingDoc.exists()) throw new Error("Parking area not found");
+    
+    const currentData = parkingDoc.data();
+    const currentSlots = currentData.slots || {};
+    
+    // Remove specified slots
+    slotIds.forEach(slotId => {
+      delete currentSlots[slotId];
+    });
+    
+    await updateDoc(parkingRef, {
+      slots: currentSlots,
+      totalSpots: Object.keys(currentSlots).length,
+      availableSpots: Object.keys(currentSlots).length
+    });
+    
+    return { success: true, slots: currentSlots };
+  } catch (error) {
+    console.error("Error removing slots:", error);
+    throw error;
+  }
+};
+
+// Get all bookings for a specific parking area
+export const getBookingsForParkingArea = async (parkingId) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    if (!parkingDoc.exists()) return [];
+    
+    const data = parkingDoc.data();
+    const allBookings = [];
+    
+    // Collect all bookings from all slots
+    Object.entries(data.slots || {}).forEach(([slotId, bookings]) => {
+      bookings.forEach(booking => {
+        allBookings.push({
+          ...booking,
+          slotId,
+          parkingId
+        });
+      });
+    });
+    
+    return allBookings;
+  } catch (error) {
+    console.error("Error fetching bookings for parking area:", error);
+    return [];
+  }
+};
+
+// Get all bookings for a specific user
+export const getUserBookings = async (userId) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    const userDoc = await getDoc(userRef);
+    if (!userDoc.exists()) return [];
+    
+    const userData = userDoc.data();
+    return userData.history || [];
+  } catch (error) {
+    console.error("Error fetching user bookings:", error);
+    return [];
+  }
+};
+
+// Cancel a booking
+export const cancelBooking = async (userId, bookingIndex) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    const userDoc = await getDoc(userRef);
+    if (!userDoc.exists()) throw new Error("User not found");
+    
+    const userData = userDoc.data();
+    const history = userData.history || [];
+    
+    if (!history[bookingIndex]) throw new Error("Booking not found");
+    
+    // Update booking status
+    history[bookingIndex].status = "cancelled";
+    
+    await updateDoc(userRef, { history });
+    
+    // Also remove from parking area slot
+    const booking = history[bookingIndex];
+    if (booking.areaId && booking.slotId) {
+      const parkingRef = doc(db, "parkingAreas", booking.areaId);
+      const parkingDoc = await getDoc(parkingRef);
+      if (parkingDoc.exists()) {
+        const parkingData = parkingDoc.data();
+        const slots = parkingData.slots || {};
+        const slotBookings = slots[booking.slotId] || [];
+        
+        // Remove the cancelled booking from slot
+        const updatedSlotBookings = slotBookings.filter(
+          b => !(b.userId === userId && 
+                 b.startTime.toDate().getTime() === booking.startTime.toDate().getTime())
+        );
+        
+        await updateDoc(parkingRef, {
+          [`slots.${booking.slotId}`]: updatedSlotBookings
+        });
+      }
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error cancelling booking:", error);
+    throw error;
+  }
+};
+
+// Get parking area statistics
+export const getParkingAreaStats = async (parkingId) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    if (!parkingDoc.exists()) return null;
+    
+    const data = parkingDoc.data();
+    const slots = data.slots || {};
+    const totalSlots = Object.keys(slots).length;
+    const occupiedSlots = Object.values(slots).reduce((total, bookings) => {
+      return total + bookings.filter(b => b.status === "active").length;
+    }, 0);
+    
+    return {
+      totalSlots,
+      occupiedSlots,
+      availableSlots: totalSlots - occupiedSlots,
+      occupancyRate: totalSlots > 0 ? (occupiedSlots / totalSlots) * 100 : 0
+    };
+  } catch (error) {
+    console.error("Error fetching parking area stats:", error);
+    return null;
+  }
+};
+
+// Search parking areas by location or name
+export const searchParkingAreas = async (searchTerm) => {
+  try {
+    const allAreas = await fetchAllParkingAreas();
+    return allAreas.filter(area => 
+      area.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      area.address.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  } catch (error) {
+    console.error("Error searching parking areas:", error);
+    return [];
+  }
+};
+
+// Get parking areas by status
+export const getParkingAreasByStatus = async (status) => {
+  try {
+    const allAreas = await fetchAllParkingAreas();
+    return allAreas.filter(area => area.status === status);
+  } catch (error) {
+    console.error("Error fetching parking areas by status:", error);
+    return [];
+  }
+};
+
+// Update parking area availability
+export const updateParkingAreaAvailability = async (parkingId) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+    if (!parkingDoc.exists()) throw new Error("Parking area not found");
+    
+    const data = parkingDoc.data();
+    const slots = data.slots || {};
+    const totalSlots = Object.keys(slots).length;
+    const occupiedSlots = Object.values(slots).reduce((total, bookings) => {
+      return total + bookings.filter(b => b.status === "active").length;
+    }, 0);
+    
+    await updateDoc(parkingRef, {
+      availableSpots: totalSlots - occupiedSlots,
+      totalSpots: totalSlots
+    });
+    
+    return { availableSpots: totalSlots - occupiedSlots, totalSlots };
+  } catch (error) {
+    console.error("Error updating parking area availability:", error);
+    throw error;
+  }
+};
+
+// --- Smart Parking System Functions ---
+
+export default {
+ /* validateParkingEntry,
+  requestGateOpen,
+   confirmExitByEmail, */
+  fetchAllParkingAreas,
+  bookParkingSlot,
+  getUserBookingHistory,
+  submitRatingForBooking
 };

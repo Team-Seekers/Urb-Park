@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getParkingLotById, createBooking } from "../services/parkingService";
+import { fetchParkingAreaById, bookParkingSlot, fetchSlotsForParkingArea, getSlotStatusForTime } from "../services/parkingService";
 import { useAppContext } from "../hooks/useAppContext";
 import Spinner from "../components/Spinner";
 import Rating from "../components/Rating";
 import { ICONS } from "../constants";
 import SpotSelectionGrid from "../components/SpotSelectionGrid";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const BookingPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { setBooking } = useAppContext();
+  const { setBooking, user } = useAppContext();
   const [lot, setLot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -18,6 +20,10 @@ const BookingPage = () => {
   const [selectedSpotId, setSelectedSpotId] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("PREPAID");
   const [vehicleNumber, setVehicleNumber] = useState("");
+  const [slots, setSlots] = useState({});
+  const [startTime, setStartTime] = useState(new Date());
+  const [endTime, setEndTime] = useState(new Date(Date.now() + 60 * 60 * 1000)); // 1 hour from now
+  const [slotStatusMap, setSlotStatusMap] = useState({});
 
   const fetchLotData = useCallback(
     async (showLoadingSpinner = false) => {
@@ -29,13 +35,19 @@ const BookingPage = () => {
       if (showLoadingSpinner) setLoading(true);
       setError("");
       try {
-        const data = await getParkingLotById(id);
+        const data = await fetchParkingAreaById(id);
         if (data) {
           setLot(data);
+          // Fetch slots for this parking area
+          const slotData = await fetchSlotsForParkingArea(id);
+          setSlots(slotData);
+          console.log("Parking area data:", data);
+          console.log("Slot data:", slotData);
         } else {
           setError("Parking lot not found.");
         }
       } catch (err) {
+        console.error("Error fetching lot data:", err);
         setError("Failed to fetch parking lot data.");
       } finally {
         if (showLoadingSpinner) setLoading(false);
@@ -53,30 +65,94 @@ const BookingPage = () => {
     setError(""); // Clear any previous errors on new selection
   };
 
+  // Calculate slot availability based on selected time
+  const calculateSlotAvailability = useCallback(() => {
+    if (!slots || Object.keys(slots).length === 0) return;
+
+    const newStatusMap = {};
+    
+    Object.keys(slots).forEach(slotId => {
+      const slotBookings = slots[slotId] || [];
+      const status = getSlotStatusForTime(slotBookings, startTime, endTime);
+      newStatusMap[slotId] = status;
+    });
+    
+    setSlotStatusMap(newStatusMap);
+    console.log("Updated slot status map:", newStatusMap);
+  }, [slots, startTime, endTime]);
+
+  // Update slot availability when time changes
+  useEffect(() => {
+    calculateSlotAvailability();
+  }, [calculateSlotAvailability]);
+
+  // Calculate total price for selected time period
+  const calculateTotalPrice = () => {
+    if (!lot?.amount || !startTime || !endTime) return "0.00";
+    
+    const hoursDiff = (endTime - startTime) / (1000 * 60 * 60);
+    const totalPrice = lot.amount * hoursDiff;
+    return totalPrice.toFixed(2);
+  };
+
   const handleBooking = async () => {
     if (!id || !lot || !selectedSpotId || !vehicleNumber) return;
 
     setIsBooking(true);
     setError("");
     try {
-      const newBooking = await createBooking(
-        id,
-        selectedSpotId,
-        vehicleNumber,
-        paymentMethod
-      );
-      setBooking(newBooking);
-      navigate("/payment");
+      const bookingData = {
+        userId: user?.uid || "guest",
+        vehicleNumber: vehicleNumber.toUpperCase(),
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        paymentComplete: paymentMethod === "PREPAID",
+        status: "active"
+      };
+
+      const result = await bookParkingSlot(id, selectedSpotId, bookingData);
+      
+      if (result.success) {
+        setBooking({
+          lotId: id,
+          slotId: selectedSpotId,
+          vehicleNumber: vehicleNumber.toUpperCase(),
+          paymentMethod: paymentMethod,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString()
+        });
+        navigate("/payment");
+      } else {
+        setError(result.message || "Booking failed.");
+      }
     } catch (err) {
       const errorMessage = err.message || "An error occurred during booking.";
       setError(errorMessage);
       // If spot was taken, refresh lot data to show updated availability and deselect
-      if (errorMessage.includes("no longer available")) {
+      if (errorMessage.includes("already booked")) {
         setSelectedSpotId(null);
         fetchLotData(false); // Refresh without showing main spinner
       }
       setIsBooking(false);
     }
+  };
+
+  // Generate spots array for the grid based on totalSpots
+  const generateSpotsArray = () => {
+    if (!lot) return [];
+    
+    const totalSpots = lot.totalSpots || 20;
+    const spots = [];
+    
+    for (let i = 1; i <= totalSpots; i++) {
+      const slotId = `slot${i}`;
+      spots.push({
+        id: slotId,
+        status: "available" // Status will be determined by statusMap in SpotSelectionGrid
+      });
+    }
+    
+    return spots;
   };
 
   if (loading) return <Spinner />;
@@ -96,6 +172,8 @@ const BookingPage = () => {
     buttonText = "Select a Spot to Continue";
   } else if (!vehicleNumber.trim()) {
     buttonText = "Enter Vehicle Number";
+  } else if (startTime >= endTime) {
+    buttonText = "End time must be after start time";
   }
 
   return (
@@ -115,7 +193,15 @@ const BookingPage = () => {
                 Price per Hour:
               </span>
               <span className="text-green-600 font-bold text-2xl">
-                ₹{lot.pricePerHour.toFixed(2)}
+                ₹{lot.amount?.toFixed(2) || "0.00"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-lg">
+              <span className="font-semibold text-gray-600">
+                Total for Selected Time:
+              </span>
+              <span className="text-green-600 font-bold text-2xl">
+                ₹{calculateTotalPrice()}
               </span>
             </div>
             <div className="flex justify-between items-center text-lg">
@@ -123,7 +209,7 @@ const BookingPage = () => {
                 Available Spots:
               </span>
               <span className="font-bold text-xl">
-                {lot.availableSpots} / {lot.totalSpots}
+                {lot.availableSpots || 0} / {lot.totalSpots || 0}
               </span>
             </div>
           </div>
@@ -131,7 +217,7 @@ const BookingPage = () => {
           <div className="mt-8">
             <h3 className="font-semibold text-lg mb-3">Features:</h3>
             <div className="flex flex-wrap gap-2">
-              {lot.features.map((feature) => (
+              {(lot.features || []).map((feature) => (
                 <span
                   key={feature}
                   className="bg-green-100 text-green-600 text-sm font-medium px-3 py-1 rounded-full"
@@ -143,12 +229,49 @@ const BookingPage = () => {
           </div>
 
           <div className="mt-8 border-t pt-6">
+            <h3 className="font-semibold text-lg mb-4">Select Date & Time</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Start Time
+                </label>
+                <DatePicker
+                  selected={startTime}
+                  onChange={(date) => setStartTime(date)}
+                  showTimeSelect
+                  timeFormat="HH:mm"
+                  timeIntervals={15}
+                  dateFormat="MMMM d, yyyy h:mm aa"
+                  minDate={new Date()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                  placeholderText="Select start time"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  End Time
+                </label>
+                <DatePicker
+                  selected={endTime}
+                  onChange={(date) => setEndTime(date)}
+                  showTimeSelect
+                  timeFormat="HH:mm"
+                  timeIntervals={15}
+                  dateFormat="MMMM d, yyyy h:mm aa"
+                  minDate={startTime}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                  placeholderText="Select end time"
+                />
+              </div>
+            </div>
+            
             <h3 className="font-semibold text-lg mb-4">Select Your Spot</h3>
-            {lot.availableSpots > 0 ? (
+            {(lot.availableSpots || 0) > 0 ? (
               <SpotSelectionGrid
-                spots={lot.spots}
+                spots={generateSpotsArray()}
                 selectedSpotId={selectedSpotId}
                 onSelectSpot={handleSelectSpot}
+                statusMap={slotStatusMap}
               />
             ) : (
               <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-r-lg">
@@ -215,8 +338,9 @@ const BookingPage = () => {
               disabled={
                 isBooking ||
                 !selectedSpotId ||
-                lot.availableSpots <= 0 ||
-                !vehicleNumber.trim()
+                (lot.availableSpots || 0) <= 0 ||
+                !vehicleNumber.trim() ||
+                startTime >= endTime
               }
               className="w-full bg-green-600 text-white font-bold py-4 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-xl"
             >
@@ -227,7 +351,7 @@ const BookingPage = () => {
         </div>
         <div className="hidden md:block md:col-span-2">
           <img
-            src={lot.image.replace("400/300", "800/1200")}
+            src={lot.image?.replace("400/300", "800/1200") || "https://picsum.photos/800/1200"}
             alt={lot.name}
             className="w-full h-full object-cover"
           />

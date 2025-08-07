@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../hooks/useAppContext";
 import {
-  getParkingLotById,
+  fetchParkingAreaById,
   addBookingToUserHistory,
+  bookParkingSlotAfterPayment,
 } from "../services/parkingService";
 import { initializePayment } from "../services/razorpayService";
 import Spinner from "../components/Spinner";
@@ -28,7 +29,7 @@ const PaymentPage = () => {
       navigate("/find");
       return;
     }
-    getParkingLotById(booking.lotId)
+    fetchParkingAreaById(booking.lotId)
       .then((data) => {
         if (data) setLot(data);
         else setError("Could not load lot details.");
@@ -46,7 +47,7 @@ const PaymentPage = () => {
         throw new Error("User not authenticated");
       }
 
-      const amountToPay = isPayAsYouGo ? 100 : lot.pricePerHour;
+      const amountToPay = lot.amount ? lot.amount : 20;
       
       // Prepare booking data for Razorpay
       const bookingData = {
@@ -68,6 +69,15 @@ const PaymentPage = () => {
         // Success callback
         async (paymentResponse, bookingData) => {
           try {
+            console.log("Payment successful, saving booking to database...");
+            console.log("Payment response:", paymentResponse);
+            console.log("Booking data:", bookingData);
+            
+            // Check if user is authenticated
+            if (!bookingData.uid || bookingData.uid === "guest") {
+              throw new Error("User not authenticated. Please login to complete booking.");
+            }
+            
             // Payment successful - now add to database
             const dbBookingData = {
               areaId: bookingData.lotId,
@@ -78,7 +88,44 @@ const PaymentPage = () => {
               orderId: paymentResponse.razorpay_order_id,
             };
 
-            await addBookingToUserHistory(bookingData.uid, dbBookingData);
+            console.log("Saving to user history...");
+            // Add to user history
+            try {
+              const historyResult = await addBookingToUserHistory(bookingData.uid, {
+                ...dbBookingData,
+                vehicleNumber: bookingData.vehicleNumber,
+                paymentId: paymentResponse.razorpay_payment_id,
+                orderId: paymentResponse.razorpay_order_id
+              });
+              
+              if (historyResult.success) {
+                console.log("User history saved successfully");
+              } else {
+                console.warn("User history not saved:", historyResult.error);
+                // Continue with parking slot booking even if user history fails
+              }
+            } catch (historyError) {
+              console.warn("Failed to save to user history:", historyError);
+              // Continue with parking slot booking even if user history fails
+            }
+            
+            console.log("Saving to parking area slots...");
+            // Add to parking area slots
+            const slotBookingData = {
+              userId: bookingData.uid,
+              vehicleNumber: bookingData.vehicleNumber,
+              startTime: dbBookingData.startTime.toISOString(),
+              endTime: dbBookingData.endTime.toISOString(),
+              status: "active",
+              paymentComplete: true,
+              paymentId: paymentResponse.razorpay_payment_id,
+              orderId: paymentResponse.razorpay_order_id,
+              createdAt: new Date()
+            };
+
+            console.log("Slot booking data:", slotBookingData);
+            await bookParkingSlotAfterPayment(bookingData.lotId, bookingData.spotId, slotBookingData);
+            console.log("Parking slot booking saved successfully");
             
             setProcessing(false);
             setPaid(true);
@@ -89,7 +136,8 @@ const PaymentPage = () => {
             }, 2000);
           } catch (error) {
             console.error("Failed to save booking to database:", error);
-            toast.error("Payment successful but failed to save booking. Please contact support.");
+            console.error("Error details:", error.message);
+            toast.error(`Payment successful but failed to save booking: ${error.message}`);
             setProcessing(false);
           }
         },
@@ -119,7 +167,20 @@ const PaymentPage = () => {
   }
 
   const isPayAsYouGo = booking.paymentMethod === "PAY_AS_YOU_GO";
-  const amountToPay = isPayAsYouGo ? 100 : lot.pricePerHour;
+  
+  // Calculate total price based on booking time if available
+  const calculateTotalPrice = () => {
+    if (booking.startTime && booking.endTime) {
+      const startTime = new Date(booking.startTime);
+      const endTime = new Date(booking.endTime);
+      const hoursDiff = (endTime - startTime) / (1000 * 60 * 60);
+      return (lot?.amount || 20) * hoursDiff;
+    }
+    return lot?.amount || 20;
+  };
+  
+  const finalAmountToPay = isPayAsYouGo ? 100 : calculateTotalPrice();
+  const amountToPay = finalAmountToPay;
 
   if (paid) {
     return (
@@ -212,7 +273,7 @@ const PaymentPage = () => {
               >
                 {processing
                   ? "Processing..."
-                  : `Proceed to Pay ₹${amountToPay.toFixed(2)}`}
+                  : `Proceed to Pay ₹${(amountToPay || 0).toFixed(2)}`}
               </button>
             </div>
             {error && (

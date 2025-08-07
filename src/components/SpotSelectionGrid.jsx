@@ -1,28 +1,30 @@
 import React from "react";
-import { SpotStatus } from "../../types";
 
-const SpotSelectionGrid = ({ spots, selectedSpotId, onSelectSpot }) => {
+const SpotSelectionGrid = ({ spots, selectedSpotId, onSelectSpot, statusMap = {} }) => {
   const getSpotClasses = (spot) => {
     const baseClasses =
       "w-full h-12 rounded-md flex items-center justify-center font-bold text-sm border-2 transition-colors duration-200";
 
     if (spot.id === selectedSpotId) {
-      return `${baseClasses} bg-green-600 text-white border-green-700 ring-2 ring-offset-1 ring-green-600`;
+      return `${baseClasses} bg-blue-600 text-white border-blue-700 ring-2 ring-offset-1 ring-blue-600`;
     }
 
-    switch (spot.status) {
-      case SpotStatus.AVAILABLE:
+    // Use statusMap to determine color based on time-based availability
+    const slotStatus = statusMap[spot.id] || "available";
+    
+    switch (slotStatus) {
+      case "available":
         return `${baseClasses} bg-green-100 text-green-600 border-green-300 hover:bg-green-200 cursor-pointer`;
-      case SpotStatus.OCCUPIED:
-      case SpotStatus.RESERVED:
-      case SpotStatus.UNAVAILABLE:
-      default:
+      case "booked":
         return `${baseClasses} bg-red-200 text-red-700 border-red-400 cursor-not-allowed`;
+      default:
+        return `${baseClasses} bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed`;
     }
   };
 
   const handleSpotClick = (spot) => {
-    if (spot.status === SpotStatus.AVAILABLE) {
+    const slotStatus = statusMap[spot.id] || "available";
+    if (slotStatus === "available") {
       onSelectSpot(spot.id);
     }
   };
@@ -38,7 +40,7 @@ const SpotSelectionGrid = ({ spots, selectedSpotId, onSelectSpot }) => {
         Booked
       </div>
       <div className="flex items-center gap-2">
-        <div className="w-4 h-4 rounded bg-green-600 border-2 border-green-700"></div>
+        <div className="w-4 h-4 rounded bg-blue-600 border-2 border-blue-700"></div>
         Selected
       </div>
     </div>
@@ -50,20 +52,23 @@ const SpotSelectionGrid = ({ spots, selectedSpotId, onSelectSpot }) => {
         ENTRANCE
       </div>
       <div className="grid grid-cols-5 md:grid-cols-10 gap-2 p-4 bg-gray-50 rounded-b-lg border-x-2 border-b-2 border-gray-200">
-        {spots.map((spot) => (
-          <button
-            key={spot.id}
-            onClick={() => handleSpotClick(spot)}
-            disabled={spot.status !== SpotStatus.AVAILABLE}
-            className={getSpotClasses(spot)}
-            aria-label={`Spot ${spot.id}, Status: ${
-              spot.status === SpotStatus.AVAILABLE ? "Available" : "Booked"
-            }`}
-            aria-pressed={spot.id === selectedSpotId}
-          >
-            {spot.id.replace("S-", "")}
-          </button>
-        ))}
+        {spots.map((spot) => {
+          const slotStatus = statusMap[spot.id] || "available";
+          return (
+            <button
+              key={spot.id}
+              onClick={() => handleSpotClick(spot)}
+              disabled={slotStatus === "booked"}
+              className={getSpotClasses(spot)}
+              aria-label={`Spot ${spot.id}, Status: ${
+                slotStatus === "available" ? "Available" : "Booked"
+              }`}
+              aria-pressed={spot.id === selectedSpotId}
+            >
+              {spot.id.replace("slot", "").replace("S-", "")}
+            </button>
+          );
+        })}
       </div>
       <Legend />
     </div>
