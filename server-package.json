@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Razorpay server for Urb-Park application",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
