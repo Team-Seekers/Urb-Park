@@ -9,6 +9,15 @@ import SpotSelectionGrid from "../components/SpotSelectionGrid";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
+// Calculate total price for selected time period
+export const calculateTotalPrice = (lot, startTime, endTime) => {
+  console.log(`${lot?.pricePerHour}, ${startTime}, ${endTime} testing`);
+  
+  const hoursDiff = (endTime - startTime) / (1000 * 60 * 60);
+  const totalPrice = (lot?.pricePerHour || 0) * hoursDiff;
+  return totalPrice.toFixed(2);
+};
+
 const BookingPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -86,12 +95,22 @@ const BookingPage = () => {
     calculateSlotAvailability();
   }, [calculateSlotAvailability]);
 
-  // Calculate total price for selected time period
+  // Debug: Log time changes
+  useEffect(() => {
+    console.log("Time changed - Start:", startTime, "End:", endTime);
+    console.log("Hours diff:", (endTime - startTime) / (1000 * 60 * 60));
+  }, [startTime, endTime]);
+
+    // Calculate total price for selected time period
   const calculateTotalPrice = () => {
-    if (!lot?.amount || !startTime || !endTime) return "0.00";
-    
+    console.log(`Price: ${lot?.pricePerHour}, Start: ${startTime}, End: ${endTime}`);
+  
     const hoursDiff = (endTime - startTime) / (1000 * 60 * 60);
-    const totalPrice = lot.amount * hoursDiff;
+    console.log(`Hours difference: ${hoursDiff}`);
+    
+    const totalPrice = (lot?.pricePerHour || 0) * hoursDiff;
+    console.log(`Total price: ${totalPrice}`);
+    
     return totalPrice.toFixed(2);
   };
 
@@ -193,7 +212,7 @@ const BookingPage = () => {
                 Price per Hour:
               </span>
               <span className="text-green-600 font-bold text-2xl">
-                ₹{lot.amount?.toFixed(2) || "0.00"}
+                ₹{lot.pricePerHour?.toFixed(2) || "0.00"}
               </span>
             </div>
             <div className="flex justify-between items-center text-lg">
@@ -318,17 +337,7 @@ const BookingPage = () => {
                 <span className="font-bold">Prepaid</span>
                 <p className="text-sm text-gray-500">Pay now securely.</p>
               </button>
-              <button
-                onClick={() => setPaymentMethod("PAY_AS_YOU_GO")}
-                className={`p-4 rounded-lg border-2 text-center transition-all ${
-                  paymentMethod === "PAY_AS_YOU_GO"
-                    ? "border-green-600 bg-green-50 ring-2 ring-green-600"
-                    : "border-gray-300 hover:border-green-600"
-                }`}
-              >
-                <span className="font-bold">Pay-as-you-go</span>
-                <p className="text-sm text-gray-500">Pay at the location.</p>
-              </button>
+              
             </div>
           </div>
 

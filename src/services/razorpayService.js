@@ -25,7 +25,7 @@ export const initializePayment = async (amount, bookingData, onSuccess, onFailur
     // Load Razorpay script
     await loadRazorpayScript();
 
-    // Create order
+    // Create order - amount is already in paisa from PaymentPage
     const order = await createOrder(amount);
 
     // Configure Razorpay options
@@ -59,12 +59,46 @@ export const initializePayment = async (amount, bookingData, onSuccess, onFailur
         email: bookingData.customerEmail || "customer@example.com",
         contact: bookingData.customerPhone || "",
       },
+      notes: {
+        booking_id: bookingData.lotId + "_" + bookingData.slotId,
+        customer_id: bookingData.uid
+      },
       theme: {
         color: "#10B981", // Green theme
       },
       modal: {
         ondismiss: function() {
           onFailure("Payment cancelled by user");
+        }
+      },
+      // Enable UPI and other payment methods
+      config: {
+        display: {
+          blocks: {
+            banks: {
+              name: "Pay using UPI",
+              instruments: [
+                {
+                  method: "upi"
+                }
+              ]
+            },
+            other: {
+              name: "Other Payment methods",
+              instruments: [
+                {
+                  method: "card"
+                },
+                {
+                  method: "netbanking"
+                }
+              ]
+            }
+          },
+          sequence: ["block.banks", "block.other"],
+          preferences: {
+            show_default_blocks: false
+          }
         }
       }
     };

@@ -1,4 +1,4 @@
-// src/components/MapComponent.jsx
+// src/components/Mapguider.jsx
 import React, { useEffect, useState, useRef } from "react";
 import {
   MapContainer,
@@ -38,7 +38,7 @@ const MapBounds = ({ userLocation, destination, routeCoords }) => {
   return null;
 };
 
-const MapComponent = ({ destination }) => {
+const Mapguider = ({ destination }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
   const [isRouting, setIsRouting] = useState(false);
@@ -218,7 +218,7 @@ const MapComponent = ({ destination }) => {
   const centerLng = (userLocation[1] + destination[1]) / 2;
 
   return (
-    <div className="h-[calc(100vh-56px)] w-full relative z-0">
+    <div className="h-64 w-full relative z-0">
       <MapContainer
         center={[centerLat, centerLng]}
         zoom={13}
@@ -306,4 +306,4 @@ const MapComponent = ({ destination }) => {
   );
 };
 
-export default MapComponent;
+export default Mapguider;

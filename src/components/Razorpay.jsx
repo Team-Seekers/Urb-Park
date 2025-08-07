@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { calculateTotalPrice } from "../pages/BookingPage";
 
 // Assume your backend server is running on localhost:3000
 const API_BASE_URL = "http://localhost:3000";
@@ -58,10 +59,22 @@ const loadRazorpayScript = () => {
 };
 
 // Main React component for the Razorpay payment form.
-const Razorpay = () => {
-  const [amount, setAmount] = useState(5000); // Amount in smallest currency unit (e.g., 5000 paisa = ₹50)
+const Razorpay = ({ bookingDetails }) => {
+  // Calculate amount based on booking details
+  const calculatedAmount = bookingDetails ? 
+    Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) ) : 5000;
+  
+  const [amount, setAmount] = useState(calculatedAmount); // Amount in smallest currency unit (e.g., 5000 paisa = ₹50)
   const [isRazorpayLoaded, setIsRazorpayLoaded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Update amount when booking details change
+  useEffect(() => {
+    if (bookingDetails) {
+      const newAmount = Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) );
+      setAmount(newAmount);
+    }
+  }, [bookingDetails]);
 
   // Load the Razorpay script when the component mounts.
   useEffect(() => {
@@ -96,8 +109,8 @@ const Razorpay = () => {
         key: "rzp_test_rN3ysbintURr2f", // Your Razorpay Key ID
         amount: order.amount,
         currency: order.currency,
-        name: "My Awesome Service",
-        description: "Payment for booking",
+        name: "Urb-Park",
+        description: "Payment for parking booking",
         order_id: order.id,
         handler: async function (response) {
           // This function is called on successful payment.
@@ -119,9 +132,43 @@ const Razorpay = () => {
           email: "john.doe@example.com",
           contact: "9999999999",
         },
+        notes: {
+          booking_id: "parking_booking",
+          customer_id: "user"
+        },
         theme: {
           color: "#F4B400", // Yellow theme to match the UI
         },
+        // Enable UPI and other payment methods
+        config: {
+          display: {
+            blocks: {
+              banks: {
+                name: "Pay using UPI",
+                instruments: [
+                  {
+                    method: "upi"
+                  }
+                ]
+              },
+              other: {
+                name: "Other Payment methods",
+                instruments: [
+                  {
+                    method: "card"
+                  },
+                  {
+                    method: "netbanking"
+                  }
+                ]
+              }
+            },
+            sequence: ["block.banks", "block.other"],
+            preferences: {
+              show_default_blocks: false
+            }
+          }
+        }
       };
 
       const rzp = new window.Razorpay(options);
@@ -144,19 +191,18 @@ const Razorpay = () => {
         </h1>
         <div className="space-y-4">
           <label htmlFor="amount" className="block text-gray-700 font-semibold">
-            Payment Amount (in INR)
+            Calculated Payment Amount (in INR)
           </label>
           <input
             id="amount"
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none transition-colors"
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg bg-gray-50 cursor-not-allowed"
             type="number"
             value={amount / 100} // Display amount in rupees
-            onChange={(e) => setAmount(Number(e.target.value) * 100)} // Store in paisa
+            readOnly
             required
-            min="1"
           />
           <p className="text-sm text-gray-500">
-            Current amount: ₹{(amount / 100).toFixed(2)}
+            Calculated amount: ₹{(amount / 100).toFixed(2)} (from booking details)
           </p>
           <button
             className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed"

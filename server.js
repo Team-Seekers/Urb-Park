@@ -21,14 +21,28 @@ app.post('/api/create-order', async (req, res) => {
   try {
     const { amount, currency = 'INR' } = req.body;
     
+    // Validate amount
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({ error: 'Invalid amount provided' });
+    }
+    
+    // Ensure amount is an integer (already in paisa from frontend)
+    const amountInPaisa = Math.round(Number(amount));
+    
+    // Validate minimum amount (₹1 = 100 paisa)
+    if (amountInPaisa < 100) {
+      return res.status(400).json({ error: 'Amount must be at least ₹1 (100 paisa)' });
+    }
+    
     const options = {
-      amount: amount * 100, // Convert to paisa
+      amount: amountInPaisa, // Amount is already in paisa
       currency: currency,
       receipt: `receipt_${Date.now()}`,
     };
 
+    console.log('Creating order with amount:', amountInPaisa, 'paisa (₹' + (amountInPaisa/100).toFixed(2) + ')');
     const order = await razorpay.orders.create(options);
-    console.log('Order created:', order);
+    console.log('Order created successfully:', order.id);
     res.json(order);
   } catch (error) {
     console.error('Error creating order:', error);

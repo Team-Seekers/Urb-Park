@@ -98,12 +98,38 @@ const isTimeOverlapping = (existingBookings, newStart, newEnd) => {
   const newEndTime = new Date(newEnd);
 
   return existingBookings.some((booking) => {
-    const existingStart = booking.startTime.toDate 
-      ? booking.startTime.toDate() 
-      : new Date(booking.startTime);
-    const existingEnd = booking.endTime.toDate 
-      ? booking.endTime.toDate() 
-      : new Date(booking.endTime);
+    // Safely handle different time formats
+    let existingStart, existingEnd;
+    
+    try {
+      // Handle Firestore Timestamp objects
+      if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+        existingStart = booking.startTime.toDate();
+      } else if (booking.startTime) {
+        existingStart = new Date(booking.startTime);
+      } else {
+        // Skip bookings with invalid start time
+        return false;
+      }
+      
+      if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+        existingEnd = booking.endTime.toDate();
+      } else if (booking.endTime) {
+        existingEnd = new Date(booking.endTime);
+      } else {
+        // Skip bookings with invalid end time
+        return false;
+      }
+      
+      // Validate dates
+      if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) {
+        return false;
+      }
+      
+    } catch (error) {
+      console.warn('Invalid booking time format:', booking);
+      return false;
+    }
 
     return (
       (newStartTime >= existingStart && newStartTime < existingEnd) ||
@@ -369,12 +395,35 @@ const calculateAvailableSpots = (slots) => {
       const hasActiveBooking = slot.bookings.some((booking) => {
         if (booking.status !== "active") return false;
         
-        const startTime = booking.startTime.toDate 
-          ? booking.startTime.toDate() 
-          : new Date(booking.startTime);
-        const endTime = booking.endTime.toDate 
-          ? booking.endTime.toDate() 
-          : new Date(booking.endTime);
+        // Safely handle different time formats
+        let startTime, endTime;
+        
+        try {
+          if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+            startTime = booking.startTime.toDate();
+          } else if (booking.startTime) {
+            startTime = new Date(booking.startTime);
+          } else {
+            return false;
+          }
+          
+          if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+            endTime = booking.endTime.toDate();
+          } else if (booking.endTime) {
+            endTime = new Date(booking.endTime);
+          } else {
+            return false;
+          }
+          
+          // Validate dates
+          if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+            return false;
+          }
+          
+        } catch (error) {
+          console.warn('Invalid booking time format in calculateAvailableSpots:', booking);
+          return false;
+        }
         
         return currentTime >= startTime && currentTime <= endTime;
       });
@@ -438,6 +487,17 @@ export const getSlotAvailabilityForTimeRange = async (parkingId, startTime, endT
 // Book a parking slot
 export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
   try {
+    // Validate required parameters
+    if (!parkingId) {
+      throw new Error("Parking area ID is required");
+    }
+    if (!slotId) {
+      throw new Error("Slot ID is required");
+    }
+    if (!bookingData) {
+      throw new Error("Booking data is required");
+    }
+
     // Validate and clean booking data
     const validatedBookingData = validateBookingData(bookingData);
 
@@ -1229,12 +1289,35 @@ export const isSlotBooked = (slot, currentTime = new Date()) => {
   return slot.bookings.some((booking) => {
     if (booking.status !== "active") return false;
     
-    const startTime = booking.startTime.toDate 
-      ? booking.startTime.toDate() 
-      : new Date(booking.startTime);
-    const endTime = booking.endTime.toDate 
-      ? booking.endTime.toDate() 
-      : new Date(booking.endTime);
+    // Safely handle different time formats
+    let startTime, endTime;
+    
+    try {
+      if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+        startTime = booking.startTime.toDate();
+      } else if (booking.startTime) {
+        startTime = new Date(booking.startTime);
+      } else {
+        return false;
+      }
+      
+      if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+        endTime = booking.endTime.toDate();
+      } else if (booking.endTime) {
+        endTime = new Date(booking.endTime);
+      } else {
+        return false;
+      }
+      
+      // Validate dates
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        return false;
+      }
+      
+    } catch (error) {
+      console.warn('Invalid booking time format in isSlotBooked:', booking);
+      return false;
+    }
     
     return currentTime >= startTime && currentTime <= endTime;
   });
@@ -1294,6 +1377,17 @@ export const bookParkingSlotAfterPayment = async (
   bookingData
 ) => {
   try {
+    // Validate required parameters
+    if (!parkingId) {
+      throw new Error("Parking area ID is required");
+    }
+    if (!slotId) {
+      throw new Error("Slot ID is required");
+    }
+    if (!bookingData) {
+      throw new Error("Booking data is required");
+    }
+
     const enhancedBookingData = {
       ...bookingData,
       status: "active",
@@ -1303,6 +1397,12 @@ export const bookParkingSlotAfterPayment = async (
     return await bookParkingSlot(parkingId, slotId, enhancedBookingData);
   } catch (error) {
     console.error("Error booking parking slot after payment:", error);
+    
+    // If slot is already booked, provide a more helpful error message
+    if (error.message.includes("already booked")) {
+      throw new Error("This slot was booked by another user during payment. Please try booking a different slot or contact support for a refund.");
+    }
+    
     throw error;
   }
 };

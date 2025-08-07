@@ -29,7 +29,7 @@ const TicketPage = () => {
       // Fetch user booking history to find the index
       const history = await getUserBookingHistory(user.uid);
       const bookingIndex = history.findIndex(
-        (b) => b.areaId === booking.lotId && b.slotId === booking.spotId && b.startTime.toDate().getTime() === new Date(booking.startTime).getTime()
+        (b) => b.areaId === booking.lotId && b.slotId === (booking.slotId || booking.spotId) && b.startTime.toDate().getTime() === new Date(booking.startTime).getTime()
       );
       if (bookingIndex === -1) throw new Error("Booking not found in user history.");
       await updateBookingStatusInUserHistory(user.uid, bookingIndex, newStatus);
@@ -108,6 +108,9 @@ const TicketPage = () => {
     return <Spinner />;
   }
 
+  // Debug: Log booking data
+  console.log("TicketPage booking data:", booking);
+
   return (
     <div className="max-w-lg mx-auto bg-white p-8 rounded-lg shadow-2xl text-center">
       <h1 className="text-3xl font-bold mb-4 text-gray-900">
@@ -124,31 +127,31 @@ const TicketPage = () => {
           <QRCode
             data={JSON.stringify({
               bookingId: booking.id,
-              spotId: booking.spotId,
+              spotId: booking.slotId || booking.spotId,
               vehicleNumber: booking.vehicleNumber,
             })}
           />
 
           <div className="mt-8 border-t pt-6 space-y-3 text-left">
             <p>
-              <strong>Lot:</strong> {booking.lotName}
+              <strong>Lot:</strong> {booking.lotName || "Parking Lot"}
             </p>
             <p>
-              <strong>Booking ID:</strong> {booking.id}
+              <strong>Booking ID:</strong> {booking.id || "N/A"}
             </p>
             <p>
-              <strong>Spot ID:</strong> {booking.spotId}
+              <strong>Spot ID:</strong> {booking.slotId || booking.spotId || "N/A"}
             </p>
             <p>
-              <strong>Vehicle No:</strong> {booking.vehicleNumber}
+              <strong>Vehicle No:</strong> {booking.vehicleNumber || "N/A"}
             </p>
             <p>
               <strong>Payment:</strong>{" "}
-              {booking.paymentMethod.replace("_", "-")}
+              {(booking.paymentMethod || "PREPAID").replace("_", "-")}
             </p>
             <p>
               <strong>Time:</strong>{" "}
-              {new Date(booking.bookingTime).toLocaleString()}
+              {booking.bookingTime ? new Date(booking.bookingTime).toLocaleString() : "N/A"}
             </p>
           </div>
         </>
@@ -178,13 +181,15 @@ const TicketPage = () => {
             Directions to Parking
           </h2>
           <div className="bg-white rounded-lg shadow-md border overflow-hidden">
-            <Mapguider destination={[booking.lotLat, booking.lotLng]} />
+            <Mapguider destination={[booking.lotLat || 28.7041, booking.lotLng || 77.1025]} />
           </div>
 
           <div className="mt-4 flex gap-3">
             <button
               onClick={() => {
-                const url = `https://www.google.com/maps/dir/?api=1&destination=${booking.lotLat},${booking.lotLng}`;
+                const lat = booking.lotLat || 28.7041;
+                const lng = booking.lotLng || 77.1025;
+                const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
                 window.open(url, "_blank");
               }}
               className="flex-1 bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
@@ -208,16 +213,20 @@ const TicketPage = () => {
 
             <button
               onClick={() => {
+                const lat = booking.lotLat || 28.7041;
+                const lng = booking.lotLng || 77.1025;
+                const lotName = booking.lotName || "Parking Lot";
+                
                 if (navigator.share) {
                   navigator.share({
                     title: "Parking Directions",
-                    text: `Navigate to ${booking.lotName}`,
-                    url: `https://www.google.com/maps/dir/?api=1&destination=${booking.lotLat},${booking.lotLng}`,
+                    text: `Navigate to ${lotName}`,
+                    url: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
                   });
                 } else {
                   // Fallback: copy to clipboard
                   navigator.clipboard.writeText(
-                    `Navigate to ${booking.lotName}: https://www.google.com/maps/dir/?api=1&destination=${booking.lotLat},${booking.lotLng}`
+                    `Navigate to ${lotName}: https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
                   );
                   alert("Directions link copied to clipboard!");
                 }
