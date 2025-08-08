@@ -15,6 +15,7 @@ import {
   onSnapshot,
   orderBy,
   limit,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "./Firebase";
 
@@ -83,7 +84,7 @@ const generateSlots = (totalSpots) => {
   const slots = [];
   for (let i = 1; i <= totalSpots; i++) {
     slots.push({
-      slotId: `S${i}`,
+      slotId: `slot${i}`,
       bookings: [],
     });
   }
@@ -98,6 +99,9 @@ const isTimeOverlapping = (existingBookings, newStart, newEnd) => {
   const newEndTime = new Date(newEnd);
 
   return existingBookings.some((booking) => {
+    // Skip cancelled or inactive bookings
+    if (booking.status !== 'active') return false;
+
     // Safely handle different time formats
     let existingStart, existingEnd;
     
@@ -299,14 +303,27 @@ export const deleteParkingArea = async (parkingId) => {
 
 // ===== SLOT MANAGEMENT FUNCTIONS =====
 
-// Fetch slots for a specific parking area
-export const fetchSlotsForParkingArea = async (parkingId) => {
+// Fetch slots for a specific parking area - returns both array format and object map
+export const fetchSlotsForParkingArea = async (parkingId, returnAsMap = false) => {
   try {
     const parkingArea = await fetchParkingAreaById(parkingId);
-    return parkingArea?.slots || [];
+    if (!parkingArea || !parkingArea.slots) {
+      return returnAsMap ? {} : [];
+    }
+
+    if (returnAsMap) {
+      // Convert slots array to object map for easier access
+      const slotsMap = {};
+      parkingArea.slots.forEach(slot => {
+        slotsMap[slot.slotId] = slot.bookings || [];
+      });
+      return slotsMap;
+    }
+
+    return parkingArea.slots || [];
   } catch (error) {
     console.error("Error fetching slots for parking area:", error);
-    return [];
+    return returnAsMap ? {} : [];
   }
 };
 
@@ -469,12 +486,12 @@ export const updateParkingAreaAvailability = async (parkingId) => {
 // Check slot availability for a specific time range
 export const getSlotAvailabilityForTimeRange = async (parkingId, startTime, endTime) => {
   try {
-    const slots = await fetchSlotsForParkingArea(parkingId);
+    const slotsMap = await fetchSlotsForParkingArea(parkingId, true);
     const availabilityMap = {};
 
-    slots.forEach((slot) => {
-      const isBooked = isTimeOverlapping(slot.bookings, startTime, endTime);
-      availabilityMap[slot.slotId] = isBooked ? "booked" : "available";
+    Object.keys(slotsMap).forEach((slotId) => {
+      const isBooked = isTimeOverlapping(slotsMap[slotId], startTime, endTime);
+      availabilityMap[slotId] = isBooked ? "booked" : "available";
     });
 
     return availabilityMap;
@@ -484,7 +501,7 @@ export const getSlotAvailabilityForTimeRange = async (parkingId, startTime, endT
   }
 };
 
-// Book a parking slot
+// Book a parking slot with transaction safety for concurrent bookings
 export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
   try {
     // Validate required parameters
@@ -501,64 +518,67 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
     // Validate and clean booking data
     const validatedBookingData = validateBookingData(bookingData);
 
-    const parkingRef = doc(db, "parkingAreas", parkingId);
-    const parkingDoc = await getDoc(parkingRef);
-    
-    if (!parkingDoc.exists()) {
-      throw new Error("Parking area not found");
-    }
+    // Use Firestore transaction to prevent race conditions
+    const result = await runTransaction(db, async (transaction) => {
+      const parkingRef = doc(db, "parkingAreas", parkingId);
+      const parkingDoc = await transaction.get(parkingRef);
+      
+      if (!parkingDoc.exists()) {
+        throw new Error("Parking area not found");
+      }
 
-    const parkingData = parkingDoc.data();
-    const slots = [...(parkingData.slots || [])];
-    let slotIndex = slots.findIndex((slot) => slot.slotId === slotId);
-    
-    // If slot doesn't exist, create it
-    if (slotIndex === -1) {
-      // Create new slot
-      const newSlot = {
-        slotId: slotId,
-        bookings: [],
+      const parkingData = parkingDoc.data();
+      const slots = [...(parkingData.slots || [])];
+      let slotIndex = slots.findIndex((slot) => slot.slotId === slotId);
+      
+      // If slot doesn't exist, create it
+      if (slotIndex === -1) {
+        const newSlot = {
+          slotId: slotId,
+          bookings: [],
+        };
+        slots.push(newSlot);
+        slotIndex = slots.length - 1;
+        console.log(`Created new slot ${slotId} for parking area ${parkingId}`);
+      }
+
+      const slot = slots[slotIndex];
+      
+      // Check for time conflicts with active bookings only
+      if (isTimeOverlapping(slot.bookings, validatedBookingData.startTime, validatedBookingData.endTime)) {
+        throw new Error("This slot has been booked just now by another user before you. Please select a different slot or time.");
+      }
+
+      // Create new booking with proper validation
+      const newBooking = {
+        userId: validatedBookingData.userId,
+        vehicleNumber: validatedBookingData.vehicleNumber,
+        startTime: Timestamp.fromDate(new Date(validatedBookingData.startTime)),
+        endTime: Timestamp.fromDate(new Date(validatedBookingData.endTime)),
+        status: validatedBookingData.status,
+        paymentComplete: validatedBookingData.paymentComplete,
+        paymentId: validatedBookingData.paymentId,
+        orderId: validatedBookingData.orderId,
+        createdAt: Timestamp.now(),
       };
-      slots.push(newSlot);
-      slotIndex = slots.length - 1;
-      console.log(`Created new slot ${slotId} for parking area ${parkingId}`);
-    }
 
-    const slot = slots[slotIndex];
-    
-    // Check for time conflicts
-    if (isTimeOverlapping(slot.bookings, validatedBookingData.startTime, validatedBookingData.endTime)) {
-      throw new Error("Slot is already booked for the selected time period");
-    }
+      // Add booking to slot
+      slots[slotIndex].bookings.push(newBooking);
 
-    // Create new booking with proper validation
-    const newBooking = {
-      userId: validatedBookingData.userId,
-      vehicleNumber: validatedBookingData.vehicleNumber,
-      startTime: Timestamp.fromDate(new Date(validatedBookingData.startTime)),
-      endTime: Timestamp.fromDate(new Date(validatedBookingData.endTime)),
-      status: validatedBookingData.status,
-      paymentComplete: validatedBookingData.paymentComplete,
-      paymentId: validatedBookingData.paymentId,
-      orderId: validatedBookingData.orderId,
-      createdAt: Timestamp.now(),
-    };
+      // Update parking area with transaction
+      const availableSpots = calculateAvailableSpots(slots);
+      
+      transaction.update(parkingRef, {
+        slots: slots,
+        availableSpots: availableSpots,
+      });
 
-    // Add booking to slot
-    slots[slotIndex].bookings.push(newBooking);
-
-    // Update parking area
-    const availableSpots = calculateAvailableSpots(slots);
-    
-    await updateDoc(parkingRef, {
-      slots: slots,
-      availableSpots: availableSpots,
+      return { newBooking, slotId };
     });
 
-    // Add to user history if not guest
+    // Add to user history if not guest (outside transaction)
     if (validatedBookingData.userId && validatedBookingData.userId !== "guest") {
       try {
-        // Ensure all required fields are present and valid
         const historyData = {
           areaId: parkingId,
           slotId: slotId,
@@ -578,7 +598,7 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
     return { 
       success: true, 
       message: `Successfully booked slot ${slotId}`,
-      booking: newBooking 
+      booking: result.newBooking 
     };
   } catch (error) {
     console.error("Error booking parking slot:", error);
@@ -827,9 +847,16 @@ export const subscribeToSlotAvailability = (parkingId, callback) => {
       if (doc.exists()) {
         const data = doc.data();
         const slots = data.slots || [];
-        callback(slots);
+        
+        // Convert to slots map format for compatibility
+        const slotsMap = {};
+        slots.forEach(slot => {
+          slotsMap[slot.slotId] = slot.bookings || [];
+        });
+        
+        callback(slotsMap);
       } else {
-        callback([]);
+        callback({});
       }
     });
   } catch (error) {

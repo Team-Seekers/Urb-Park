@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { fetchParkingAreaById, bookParkingSlot, fetchSlotsForParkingArea, getSlotStatusForTime } from "../services/parkingService";
+import { 
+  fetchParkingAreaById, 
+  bookParkingSlot, 
+  fetchSlotsForParkingArea, 
+  getSlotStatusForTime,
+  subscribeToSlotAvailability
+} from "../services/parkingService";
 import { useAppContext } from "../hooks/useAppContext";
 import Spinner from "../components/Spinner";
 import Rating from "../components/Rating";
@@ -8,6 +14,7 @@ import { ICONS } from "../constants";
 import SpotSelectionGrid from "../components/SpotSelectionGrid";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { toast } from "react-toastify";
 
 // Calculate total price for selected time period
 export const calculateTotalPrice = (lot, startTime, endTime) => {
@@ -30,21 +37,21 @@ const BookingPage = () => {
   const [paymentMethod, setPaymentMethod] = useState("PREPAID");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [slots, setSlots] = useState({});
+  const [slotStatusMap, setSlotStatusMap] = useState({});
+  const [realtimeUnsubscribe, setRealtimeUnsubscribe] = useState(null);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
-
-  // Set initial start time to current time (rounded to next 15-minute interval)
+  // Set initial start time to current time (rounded to next hour)
   const getInitialStartTime = () => {
     const now = new Date();
-    const minutes = now.getMinutes();
-    const roundedMinutes = Math.ceil(minutes / 15) * 15;
-    now.setMinutes(roundedMinutes, 0, 0);
+    now.setMinutes(0, 0, 0); // Round to the hour
+    now.setHours(now.getHours() + 1); // Start from next hour
     return now;
   };
   
   const initialStartTime = getInitialStartTime();
   const [startTime, setStartTime] = useState(initialStartTime);
   const [endTime, setEndTime] = useState(new Date(initialStartTime.getTime() + 60 * 60 * 1000)); // 1 hour from start
-  const [slotStatusMap, setSlotStatusMap] = useState({});
 
   const fetchLotData = useCallback(
     async (showLoadingSpinner = false) => {
@@ -60,6 +67,7 @@ const BookingPage = () => {
         if (data) {
           setLot(data);
           // Fetch slots for this parking area
+          setIsLoadingSlots(true);
           const slotData = await fetchSlotsForParkingArea(id);
           setSlots(slotData);
           console.log("Parking area data:", data);
@@ -72,40 +80,103 @@ const BookingPage = () => {
         setError("Failed to fetch parking lot data.");
       } finally {
         if (showLoadingSpinner) setLoading(false);
+        setIsLoadingSlots(false);
       }
     },
     [id]
   );
+
+  // Setup real-time subscription for slot updates
+  useEffect(() => {
+    if (id) {
+      const unsubscribe = subscribeToSlotAvailability(id, (updatedSlots) => {
+        console.log("Real-time slot update received:", updatedSlots);
+        setSlots(updatedSlots);
+      });
+      
+      setRealtimeUnsubscribe(() => unsubscribe);
+      
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      };
+    }
+  }, [id]);
 
   useEffect(() => {
     fetchLotData(true);
   }, [fetchLotData]);
 
   const handleSelectSpot = (spotId) => {
+    const slotStatus = slotStatusMap[spotId];
+    if (slotStatus === "booked") {
+      toast.warn("This slot is not available for the selected time period.");
+      return;
+    }
+    
     setSelectedSpotId((prev) => (prev === spotId ? null : spotId));
     setError(""); // Clear any previous errors on new selection
   };
 
-  // Calculate slot availability based on selected time
+  // Calculate slot availability based on selected time - FIXED VERSION
   const calculateSlotAvailability = useCallback(() => {
-    if (!slots || Object.keys(slots).length === 0) return;
-
+    console.log("Calculating slot availability...", { slots, startTime, endTime, totalSpots: lot?.totalSpots });
+    
+    // Show loading state while calculating
+    setIsLoadingSlots(true);
+    
     const newStatusMap = {};
     
-    Object.keys(slots).forEach(slotId => {
-      const slotBookings = slots[slotId] || [];
-      const status = getSlotStatusForTime(slotBookings, startTime, endTime);
-      newStatusMap[slotId] = status;
-    });
+    // Generate all possible slot IDs first
+    if (lot && lot.totalSpots) {
+      for (let i = 1; i <= lot.totalSpots; i++) {
+        const slotId = `slot${i}`;
+        newStatusMap[slotId] = "available"; // Default to available
+      }
+    }
     
+    // If we have slot booking data, check each slot's availability
+    if (slots && Object.keys(slots).length > 0) {
+      Object.keys(slots).forEach(slotId => {
+        const slotBookings = slots[slotId] || [];
+        console.log(`Checking slot ${slotId}:`, slotBookings);
+        
+        // Use the service function to determine status
+        const status = getSlotStatusForTime(slotBookings, startTime, endTime);
+        console.log(`Slot ${slotId} status:`, status);
+        
+        newStatusMap[slotId] = status;
+      });
+    }
+    
+    console.log("Final slot status map:", newStatusMap);
     setSlotStatusMap(newStatusMap);
-    console.log("Updated slot status map:", newStatusMap);
-  }, [slots, startTime, endTime]);
+    setIsLoadingSlots(false);
+  }, [slots, startTime, endTime, lot]);
 
-  // Update slot availability when time changes
+  // Update slot availability when dependencies change - FIXED
   useEffect(() => {
-    calculateSlotAvailability();
-  }, [calculateSlotAvailability]);
+    // Only calculate if we have lot data
+    if (lot && startTime && endTime) {
+      console.log("Dependencies changed, recalculating availability...");
+      calculateSlotAvailability();
+    }
+  }, [lot, slots, startTime, endTime, calculateSlotAvailability]);
+
+  // Clear selected spot if it becomes unavailable - IMPROVED
+  useEffect(() => {
+    if (selectedSpotId) {
+      const currentStatus = slotStatusMap[selectedSpotId];
+      console.log(`Selected spot ${selectedSpotId} current status:`, currentStatus);
+      
+      if (currentStatus === "booked" || currentStatus === "maintenance") {
+        console.log("Selected spot became unavailable, clearing selection");
+        setSelectedSpotId(null);
+        toast.info("Your selected slot became unavailable. Please select another slot.");
+      }
+    }
+  }, [selectedSpotId, slotStatusMap]);
 
   // Debug: Log time changes
   useEffect(() => {
@@ -113,7 +184,7 @@ const BookingPage = () => {
     console.log("Hours diff:", (endTime - startTime) / (1000 * 60 * 60));
   }, [startTime, endTime]);
 
-    // Calculate total price for selected time period
+  // Calculate total price for selected time period
   const calculateTotalPrice = () => {
     console.log(`Price: ${lot?.pricePerHour}, Start: ${startTime}, End: ${endTime}`);
   
@@ -129,8 +200,18 @@ const BookingPage = () => {
   const handleBooking = async () => {
     if (!id || !lot || !selectedSpotId || !vehicleNumber) return;
 
+    // Double-check slot availability before booking
+    const currentStatus = slotStatusMap[selectedSpotId];
+    if (currentStatus !== "available") {
+      setError("Selected slot is no longer available. Please choose another slot.");
+      toast.error("Selected slot is no longer available. Please choose another slot.");
+      setSelectedSpotId(null);
+      return;
+    }
+
     setIsBooking(true);
     setError("");
+    
     try {
       const bookingData = {
         userId: user?.uid || "guest",
@@ -152,19 +233,72 @@ const BookingPage = () => {
           startTime: startTime.toISOString(),
           endTime: endTime.toISOString()
         });
+        
+        toast.success("Slot booked successfully! Redirecting to payment...");
         navigate("/payment");
       } else {
         setError(result.message || "Booking failed.");
+        toast.error(result.message || "Booking failed.");
       }
     } catch (err) {
       const errorMessage = err.message || "An error occurred during booking.";
       setError(errorMessage);
-      // If spot was taken, refresh lot data to show updated availability and deselect
-      if (errorMessage.includes("already booked")) {
+      
+      // Show appropriate toast message for concurrent booking
+      if (errorMessage.includes("booked just now by another user")) {
+        toast.error("This slot was just booked by another user. Please select a different slot.");
         setSelectedSpotId(null);
-        fetchLotData(false); // Refresh without showing main spinner
+      } else {
+        toast.error(errorMessage);
       }
+      
+      // Refresh data to get latest availability
+      fetchLotData(false);
+    } finally {
       setIsBooking(false);
+    }
+  };
+
+  // Handle start time change with validation - IMPROVED
+  const handleStartTimeChange = (date) => {
+    if (!date) return;
+    
+    console.log("Start time changing to:", date);
+    setStartTime(date);
+    
+    // Ensure end time is always after start time (minimum 1 hour)
+    if (date && endTime && date >= endTime) {
+      const newEndTime = new Date(date.getTime() + 60 * 60 * 1000);
+      console.log("Adjusting end time to:", newEndTime);
+      setEndTime(newEndTime);
+    }
+    
+    // Clear selected spot when time changes
+    if (selectedSpotId) {
+      console.log("Clearing selected spot due to time change");
+      setSelectedSpotId(null);
+    }
+  };
+
+  // Handle end time change with validation - IMPROVED
+  const handleEndTimeChange = (date) => {
+    if (!date) return;
+    
+    console.log("End time changing to:", date);
+    
+    // Ensure end time is at least 1 hour after start time
+    const minEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+    if (date < minEndTime) {
+      toast.warn("End time must be at least 1 hour after start time.");
+      setEndTime(minEndTime);
+    } else {
+      setEndTime(date);
+    }
+    
+    // Clear selected spot when time changes
+    if (selectedSpotId) {
+      console.log("Clearing selected spot due to time change");
+      setSelectedSpotId(null);
     }
   };
 
@@ -179,11 +313,23 @@ const BookingPage = () => {
       const slotId = `slot${i}`;
       spots.push({
         id: slotId,
-        status: "available" // Status will be determined by statusMap in SpotSelectionGrid
+        status: slotStatusMap[slotId] || "available"
       });
     }
     
     return spots;
+  };
+
+  // Check if booking is valid
+  const isBookingValid = () => {
+    return (
+      selectedSpotId &&
+      vehicleNumber.trim() &&
+      startTime < endTime &&
+      slotStatusMap[selectedSpotId] === "available" &&
+      !isBooking &&
+      !isLoadingSlots
+    );
   };
 
   if (loading) return <Spinner />;
@@ -197,15 +343,19 @@ const BookingPage = () => {
   let buttonText = "Proceed to Payment";
   if (isBooking) {
     buttonText = "Processing...";
-  } else if (lot.availableSpots <= 0) {
-    buttonText = "Lot Full";
+  } else if (isLoadingSlots) {
+    buttonText = "Loading availability...";
   } else if (!selectedSpotId) {
     buttonText = "Select a Spot to Continue";
   } else if (!vehicleNumber.trim()) {
     buttonText = "Enter Vehicle Number";
   } else if (startTime >= endTime) {
-    buttonText = "End time must be after start time";
+    buttonText = "Invalid time range";
+  } else if (slotStatusMap[selectedSpotId] === "booked") {
+    buttonText = "Selected slot is unavailable";
   }
+
+  const availableSlots = Object.values(slotStatusMap).filter(status => status === "available").length;
 
   return (
     <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
@@ -240,7 +390,8 @@ const BookingPage = () => {
                 Available Spots:
               </span>
               <span className="font-bold text-xl">
-                {lot.availableSpots || 0} / {lot.totalSpots || 0}
+                {availableSlots} / {lot.totalSpots || 0}
+                {isLoadingSlots && <span className="text-sm text-blue-500 ml-2">Checking...</span>}
               </span>
             </div>
           </div>
@@ -268,19 +419,13 @@ const BookingPage = () => {
                 </label>
                 <DatePicker
                   selected={startTime}
-                  onChange={(date) => {
-                    setStartTime(date);
-                    // Ensure end time is always after start time
-                    if (date && endTime && date >= endTime) {
-                      setEndTime(new Date(date.getTime() + 60 * 60 * 1000)); // Add 1 hour
-                    }
-                  }}
+                  onChange={handleStartTimeChange}
                   showTimeSelect
                   timeFormat="HH:mm"
-                  timeIntervals={15}
+                  timeIntervals={60} // 1 hour intervals
                   dateFormat="MMMM d, yyyy h:mm aa"
                   minDate={new Date()}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 cursor-pointer"
                   placeholderText="Select start time"
                 />
               </div>
@@ -290,32 +435,49 @@ const BookingPage = () => {
                 </label>
                 <DatePicker
                   selected={endTime}
-                  onChange={(date) => setEndTime(date)}
+                  onChange={handleEndTimeChange}
                   showTimeSelect
                   timeFormat="HH:mm"
-                  timeIntervals={15}
+                  timeIntervals={60} // 1 hour intervals
                   dateFormat="MMMM d, yyyy h:mm aa"
-                  minDate={startTime ? new Date(startTime.getTime() + 15 * 60 * 1000) : new Date()}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
+                  minDate={startTime ? new Date(startTime.getTime() + 60 * 60 * 1000) : new Date()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 cursor-pointer"
                   placeholderText="Select end time"
                 />
               </div>
             </div>
             
             <h3 className="font-semibold text-lg mb-4">Select Your Spot</h3>
-            {(lot.availableSpots || 0) > 0 ? (
+            <div className="mb-4 text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+              <span className="font-medium">🔄 Real-time Updates:</span> Slot availability updates automatically. 
+              Red slots are booked for your selected time period.
+            </div>
+            
+            {availableSlots > 0 ? (
               <SpotSelectionGrid
                 spots={generateSpotsArray()}
                 selectedSpotId={selectedSpotId}
                 onSelectSpot={handleSelectSpot}
                 statusMap={slotStatusMap}
+                isLoading={isLoadingSlots}
+                startTime={startTime}
+                endTime={endTime}
               />
             ) : (
               <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-r-lg">
-                <p className="font-bold">This lot is currently full.</p>
-                <p className="text-sm">
-                  Please check back later or find another location.
-                </p>
+                {isLoadingSlots ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500 mr-2"></div>
+                    <p className="font-bold">Checking availability...</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="font-bold">All slots are booked for the selected time period.</p>
+                    <p className="text-sm">
+                      Please select a different time or check back later.
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -336,6 +498,7 @@ const BookingPage = () => {
                 onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                 placeholder="E.G., ABC-1234"
+                maxLength={15}
                 required
               />
             </div>
@@ -343,7 +506,7 @@ const BookingPage = () => {
 
           <div className="mt-8 border-t pt-6">
             <h3 className="font-semibold text-lg mb-3">Payment Method</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <button
                 onClick={() => setPaymentMethod("PREPAID")}
                 className={`p-4 rounded-lg border-2 text-center transition-all ${
@@ -355,25 +518,26 @@ const BookingPage = () => {
                 <span className="font-bold">Prepaid</span>
                 <p className="text-sm text-gray-500">Pay now securely.</p>
               </button>
-              
             </div>
           </div>
 
           <div className="mt-8">
             <button
               onClick={handleBooking}
-              disabled={
-                isBooking ||
-                !selectedSpotId ||
-                (lot.availableSpots || 0) <= 0 ||
-                !vehicleNumber.trim() ||
-                startTime >= endTime
-              }
+              disabled={!isBookingValid()}
               className="w-full bg-green-600 text-white font-bold py-4 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-xl"
             >
               {buttonText}
             </button>
             {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
+            
+            {selectedSpotId && slotStatusMap[selectedSpotId] === "available" && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+                <p className="text-green-700 font-medium">
+                  Slot {selectedSpotId.replace("slot", "")} selected for {((endTime - startTime) / (1000 * 60 * 60)).toFixed(1)} hour(s)
+                </p>
+              </div>
+            )}
           </div>
         </div>
         <div className="hidden md:block md:col-span-2">
