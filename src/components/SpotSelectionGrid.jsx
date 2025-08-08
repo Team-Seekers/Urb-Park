@@ -14,9 +14,9 @@ const SpotSelectionGrid = ({ spots, selectedSpotId, onSelectSpot, statusMap = {}
     
     switch (slotStatus) {
       case "available":
-        return `${baseClasses} bg-green-100 text-green-600 border-green-300 hover:bg-green-200 cursor-pointer`;
+        return `${baseClasses} bg-green-200 text-green-800 border-green-400 hover:bg-green-300 cursor-pointer`;
       case "booked":
-        return `${baseClasses} bg-red-200 text-red-700 border-red-400 cursor-not-allowed`;
+        return `${baseClasses} bg-red-300 text-red-900 border-red-500 cursor-not-allowed`;
       default:
         return `${baseClasses} bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed`;
     }
@@ -32,11 +32,11 @@ const SpotSelectionGrid = ({ spots, selectedSpotId, onSelectSpot, statusMap = {}
   const Legend = () => (
     <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-4 text-sm text-gray-600">
       <div className="flex items-center gap-2">
-        <div className="w-4 h-4 rounded bg-green-100 border-2 border-green-300"></div>
+        <div className="w-4 h-4 rounded bg-green-200 border-2 border-green-400"></div>
         Available
       </div>
       <div className="flex items-center gap-2">
-        <div className="w-4 h-4 rounded bg-red-200 border-2 border-red-400"></div>
+        <div className="w-4 h-4 rounded bg-red-300 border-2 border-red-500"></div>
         Booked
       </div>
       <div className="flex items-center gap-2">

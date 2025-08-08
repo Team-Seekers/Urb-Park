@@ -30,8 +30,20 @@ const BookingPage = () => {
   const [paymentMethod, setPaymentMethod] = useState("PREPAID");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [slots, setSlots] = useState({});
-  const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(new Date(Date.now() + 60 * 60 * 1000)); // 1 hour from now
+
+
+  // Set initial start time to current time (rounded to next 15-minute interval)
+  const getInitialStartTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.ceil(minutes / 15) * 15;
+    now.setMinutes(roundedMinutes, 0, 0);
+    return now;
+  };
+  
+  const initialStartTime = getInitialStartTime();
+  const [startTime, setStartTime] = useState(initialStartTime);
+  const [endTime, setEndTime] = useState(new Date(initialStartTime.getTime() + 60 * 60 * 1000)); // 1 hour from start
   const [slotStatusMap, setSlotStatusMap] = useState({});
 
   const fetchLotData = useCallback(
@@ -256,7 +268,13 @@ const BookingPage = () => {
                 </label>
                 <DatePicker
                   selected={startTime}
-                  onChange={(date) => setStartTime(date)}
+                  onChange={(date) => {
+                    setStartTime(date);
+                    // Ensure end time is always after start time
+                    if (date && endTime && date >= endTime) {
+                      setEndTime(new Date(date.getTime() + 60 * 60 * 1000)); // Add 1 hour
+                    }
+                  }}
                   showTimeSelect
                   timeFormat="HH:mm"
                   timeIntervals={15}
@@ -277,7 +295,7 @@ const BookingPage = () => {
                   timeFormat="HH:mm"
                   timeIntervals={15}
                   dateFormat="MMMM d, yyyy h:mm aa"
-                  minDate={startTime}
+                  minDate={startTime ? new Date(startTime.getTime() + 15 * 60 * 1000) : new Date()}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500"
                   placeholderText="Select end time"
                 />

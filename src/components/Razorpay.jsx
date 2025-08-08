@@ -62,16 +62,16 @@ const loadRazorpayScript = () => {
 const Razorpay = ({ bookingDetails }) => {
   // Calculate amount based on booking details
   const calculatedAmount = bookingDetails ? 
-    Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) ) : 5000;
+    Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) * 100) : 5000;
   
-  const [amount, setAmount] = useState(calculatedAmount); // Amount in smallest currency unit (e.g., 5000 paisa = ₹50)
+  const [amount, setAmount] = useState(calculatedAmount); // Amount in smallest currency unit (paisa)
   const [isRazorpayLoaded, setIsRazorpayLoaded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Update amount when booking details change
   useEffect(() => {
     if (bookingDetails) {
-      const newAmount = Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) );
+      const newAmount = Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) * 100);
       setAmount(newAmount);
     }
   }, [bookingDetails]);
