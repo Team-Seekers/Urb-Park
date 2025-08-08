@@ -88,6 +88,7 @@ export default function AuthModal({ open, onClose, onSuccess }) {
         phone: signup.phoneno,
         role: "user",
         history: [], // initialized empty
+        notifications: [], // initialized empty notifications array
         vehicles: signup.vehicle ? [signup.vehicle] : [],
       });
   

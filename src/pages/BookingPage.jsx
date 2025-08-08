@@ -5,7 +5,9 @@ import {
   bookParkingSlot, 
   fetchSlotsForParkingArea, 
   getSlotStatusForTime,
-  subscribeToSlotAvailability
+  subscribeToSlotAvailability,
+  getSlotAvailabilityWithBookings,
+  getSlotBookings
 } from "../services/parkingService";
 import { useAppContext } from "../hooks/useAppContext";
 import Spinner from "../components/Spinner";
@@ -28,7 +30,7 @@ export const calculateTotalPrice = (lot, startTime, endTime) => {
 const BookingPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { setBooking, user } = useAppContext();
+  const { setBooking, user, addNotification } = useAppContext();
   const [lot, setLot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -108,6 +110,13 @@ const BookingPage = () => {
     fetchLotData(true);
   }, [fetchLotData]);
 
+  // Initial slot availability check when component loads
+  useEffect(() => {
+    if (lot && startTime && endTime) {
+      handleTimeChange(startTime, endTime);
+    }
+  }, [lot]); // Only run when lot data is loaded initially
+
   const handleSelectSpot = (spotId) => {
     const slotStatus = slotStatusMap[spotId];
     if (slotStatus === "booked") {
@@ -118,51 +127,6 @@ const BookingPage = () => {
     setSelectedSpotId((prev) => (prev === spotId ? null : spotId));
     setError(""); // Clear any previous errors on new selection
   };
-
-  // Calculate slot availability based on selected time - FIXED VERSION
-  const calculateSlotAvailability = useCallback(() => {
-    console.log("Calculating slot availability...", { slots, startTime, endTime, totalSpots: lot?.totalSpots });
-    
-    // Show loading state while calculating
-    setIsLoadingSlots(true);
-    
-    const newStatusMap = {};
-    
-    // Generate all possible slot IDs first
-    if (lot && lot.totalSpots) {
-      for (let i = 1; i <= lot.totalSpots; i++) {
-        const slotId = `slot${i}`;
-        newStatusMap[slotId] = "available"; // Default to available
-      }
-    }
-    
-    // If we have slot booking data, check each slot's availability
-    if (slots && Object.keys(slots).length > 0) {
-      Object.keys(slots).forEach(slotId => {
-        const slotBookings = slots[slotId] || [];
-        console.log(`Checking slot ${slotId}:`, slotBookings);
-        
-        // Use the service function to determine status
-        const status = getSlotStatusForTime(slotBookings, startTime, endTime);
-        console.log(`Slot ${slotId} status:`, status);
-        
-        newStatusMap[slotId] = status;
-      });
-    }
-    
-    console.log("Final slot status map:", newStatusMap);
-    setSlotStatusMap(newStatusMap);
-    setIsLoadingSlots(false);
-  }, [slots, startTime, endTime, lot]);
-
-  // Update slot availability when dependencies change - FIXED
-  useEffect(() => {
-    // Only calculate if we have lot data
-    if (lot && startTime && endTime) {
-      console.log("Dependencies changed, recalculating availability...");
-      calculateSlotAvailability();
-    }
-  }, [lot, slots, startTime, endTime, calculateSlotAvailability]);
 
   // Clear selected spot if it becomes unavailable - IMPROVED
   useEffect(() => {
@@ -197,111 +161,6 @@ const BookingPage = () => {
     return totalPrice.toFixed(2);
   };
 
-  const handleBooking = async () => {
-    if (!id || !lot || !selectedSpotId || !vehicleNumber) return;
-
-    // Double-check slot availability before booking
-    const currentStatus = slotStatusMap[selectedSpotId];
-    if (currentStatus !== "available") {
-      setError("Selected slot is no longer available. Please choose another slot.");
-      toast.error("Selected slot is no longer available. Please choose another slot.");
-      setSelectedSpotId(null);
-      return;
-    }
-
-    setIsBooking(true);
-    setError("");
-    
-    try {
-      const bookingData = {
-        userId: user?.uid || "guest",
-        vehicleNumber: vehicleNumber.toUpperCase(),
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        paymentComplete: paymentMethod === "PREPAID",
-        status: "active"
-      };
-
-      const result = await bookParkingSlot(id, selectedSpotId, bookingData);
-      
-      if (result.success) {
-        setBooking({
-          lotId: id,
-          slotId: selectedSpotId,
-          vehicleNumber: vehicleNumber.toUpperCase(),
-          paymentMethod: paymentMethod,
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString()
-        });
-        
-        toast.success("Slot booked successfully! Redirecting to payment...");
-        navigate("/payment");
-      } else {
-        setError(result.message || "Booking failed.");
-        toast.error(result.message || "Booking failed.");
-      }
-    } catch (err) {
-      const errorMessage = err.message || "An error occurred during booking.";
-      setError(errorMessage);
-      
-      // Show appropriate toast message for concurrent booking
-      if (errorMessage.includes("booked just now by another user")) {
-        toast.error("This slot was just booked by another user. Please select a different slot.");
-        setSelectedSpotId(null);
-      } else {
-        toast.error(errorMessage);
-      }
-      
-      // Refresh data to get latest availability
-      fetchLotData(false);
-    } finally {
-      setIsBooking(false);
-    }
-  };
-
-  // Handle start time change with validation - IMPROVED
-  const handleStartTimeChange = (date) => {
-    if (!date) return;
-    
-    console.log("Start time changing to:", date);
-    setStartTime(date);
-    
-    // Ensure end time is always after start time (minimum 1 hour)
-    if (date && endTime && date >= endTime) {
-      const newEndTime = new Date(date.getTime() + 60 * 60 * 1000);
-      console.log("Adjusting end time to:", newEndTime);
-      setEndTime(newEndTime);
-    }
-    
-    // Clear selected spot when time changes
-    if (selectedSpotId) {
-      console.log("Clearing selected spot due to time change");
-      setSelectedSpotId(null);
-    }
-  };
-
-  // Handle end time change with validation - IMPROVED
-  const handleEndTimeChange = (date) => {
-    if (!date) return;
-    
-    console.log("End time changing to:", date);
-    
-    // Ensure end time is at least 1 hour after start time
-    const minEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-    if (date < minEndTime) {
-      toast.warn("End time must be at least 1 hour after start time.");
-      setEndTime(minEndTime);
-    } else {
-      setEndTime(date);
-    }
-    
-    // Clear selected spot when time changes
-    if (selectedSpotId) {
-      console.log("Clearing selected spot due to time change");
-      setSelectedSpotId(null);
-    }
-  };
-
   // Generate spots array for the grid based on totalSpots
   const generateSpotsArray = () => {
     if (!lot) return [];
@@ -332,6 +191,131 @@ const BookingPage = () => {
     );
   };
 
+  const handleBooking = async () => {
+    if (!id || !lot || !selectedSpotId || !vehicleNumber) return;
+
+    // Double-check slot availability before proceeding to payment
+    const currentStatus = slotStatusMap[selectedSpotId];
+    if (currentStatus !== "available") {
+      setError("Selected slot is no longer available. Please choose another slot.");
+      toast.error("Selected slot is no longer available. Please choose another slot.");
+      setSelectedSpotId(null);
+      return;
+    }
+
+    setIsBooking(true);
+    setError("");
+    
+    try {
+      // Set booking context without storing in database yet
+      // The actual booking will be stored in database only after successful payment
+      setBooking({
+        lotId: id,
+        slotId: selectedSpotId,
+        vehicleNumber: vehicleNumber.toUpperCase(),
+        paymentMethod: paymentMethod,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        lotName: lot.name,
+        lotAddress: lot.address,
+        pricePerHour: lot.pricePerHour
+      });
+         
+      toast.success("Redirecting to payment...");
+      addNotification(`Preparing payment for ${lot.name} - Slot ${selectedSpotId}`);
+      navigate("/payment");
+    } catch (err) {
+      const errorMessage = err.message || "An error occurred while preparing payment.";
+      setError(errorMessage);
+      toast.error(errorMessage);
+      
+      // If slot is no longer available, clear selection
+      if (errorMessage.includes("no longer available")) {
+        setSelectedSpotId(null);
+      }
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
+  // Handle time change - reads slot data from Firestore to determine availability
+  const handleTimeChange = async (newStartTime, newEndTime) => {
+    if (!id || !newStartTime || !newEndTime) return;
+    
+    setIsLoadingSlots(true);
+    setError("");
+    
+    try {
+      // Fetch all slots for this parking area
+      const parkingArea = await fetchParkingAreaById(id);
+      if (!parkingArea) {
+        console.error("No parking area found");
+        return;
+      }
+
+      const newStatusMap = {};
+      const slots = parkingArea.slots || [];
+      
+      // Check each slot's availability based on time conflicts
+      for (const slot of slots) {
+        const slotId = slot.slotId;
+        const bookings = slot.bookings || [];
+        let isAvailable = true;
+        
+        // Check if any existing booking conflicts with the new time range
+        for (const booking of bookings) {
+          let bookingStart, bookingEnd;
+          
+          // Handle Firestore Timestamps
+          if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+            bookingStart = booking.startTime.toDate();
+          } else if (booking.startTime) {
+            bookingStart = new Date(booking.startTime);
+          } else {
+            continue; // Skip bookings without start time
+          }
+          
+          if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+            bookingEnd = booking.endTime.toDate();
+          } else if (booking.endTime) {
+            bookingEnd = new Date(booking.endTime);
+          } else {
+            continue; // Skip bookings without end time
+          }
+          
+          // Check for time conflict: if new booking overlaps with existing booking
+          // Conflict occurs if:
+          // 1. New start time is before existing end time AND new end time is after existing start time
+          if (newStartTime < bookingEnd && newEndTime > bookingStart) {
+            isAvailable = false;
+            break;
+          }
+        }
+        
+        newStatusMap[slotId] = isAvailable ? "available" : "booked";
+      }
+      
+      // Generate slots for any missing slot IDs (in case totalSpots > existing slots)
+      if (parkingArea.totalSpots) {
+        for (let i = 1; i <= parkingArea.totalSpots; i++) {
+          const slotId = `slot${i}`;
+          if (!newStatusMap[slotId]) {
+            newStatusMap[slotId] = "available";
+          }
+        }
+      }
+      
+      setSlotStatusMap(newStatusMap);
+      console.log("Updated slot status map:", newStatusMap);
+      
+    } catch (error) {
+      console.error("Error checking slot availability:", error);
+      setError("Failed to check slot availability. Please try again.");
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  };
+
   if (loading) return <Spinner />;
   if (!lot)
     return (
@@ -342,7 +326,7 @@ const BookingPage = () => {
 
   let buttonText = "Proceed to Payment";
   if (isBooking) {
-    buttonText = "Processing...";
+    buttonText = "Preparing Payment...";
   } else if (isLoadingSlots) {
     buttonText = "Loading availability...";
   } else if (!selectedSpotId) {
@@ -356,6 +340,9 @@ const BookingPage = () => {
   }
 
   const availableSlots = Object.values(slotStatusMap).filter(status => status === "available").length;
+
+  // Debug: Log features data
+  console.log("BookingPage - lot features:", lot?.features, "type:", typeof lot?.features);
 
   return (
     <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
@@ -399,14 +386,27 @@ const BookingPage = () => {
           <div className="mt-8">
             <h3 className="font-semibold text-lg mb-3">Features:</h3>
             <div className="flex flex-wrap gap-2">
-              {(lot.features || []).map((feature) => (
-                <span
-                  key={feature}
-                  className="bg-green-100 text-green-600 text-sm font-medium px-3 py-1 rounded-full"
-                >
-                  {feature}
-                </span>
-              ))}
+              {lot.features && Array.isArray(lot.features) && lot.features.length > 0 ? (
+                lot.features.map((feature, index) => (
+                  <span
+                    key={index}
+                    className="bg-green-100 text-green-600 text-sm font-medium px-3 py-1 rounded-full"
+                  >
+                    {feature}
+                  </span>
+                ))
+              ) : lot.features && typeof lot.features === 'string' ? (
+                lot.features.split(',').map((feature, index) => (
+                  <span
+                    key={index}
+                    className="bg-green-100 text-green-600 text-sm font-medium px-3 py-1 rounded-full"
+                  >
+                    {feature.trim()}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-500 text-sm">No features available</span>
+              )}
             </div>
           </div>
 
@@ -419,7 +419,25 @@ const BookingPage = () => {
                 </label>
                 <DatePicker
                   selected={startTime}
-                  onChange={handleStartTimeChange}
+                  onChange={(date) => {
+                    if (!date) return;
+                    setStartTime(date);
+                    
+                    // Ensure end time is always after start time (minimum 1 hour)
+                    let newEndTime = endTime;
+                    if (date && endTime && date >= endTime) {
+                      newEndTime = new Date(date.getTime() + 60 * 60 * 1000);
+                      setEndTime(newEndTime);
+                    }
+                    
+                    // Clear selected spot when time changes
+                    if (selectedSpotId) {
+                      setSelectedSpotId(null);
+                    }
+                    
+                    // Update slot availability
+                    handleTimeChange(date, newEndTime);
+                  }}
                   showTimeSelect
                   timeFormat="HH:mm"
                   timeIntervals={60} // 1 hour intervals
@@ -435,7 +453,25 @@ const BookingPage = () => {
                 </label>
                 <DatePicker
                   selected={endTime}
-                  onChange={handleEndTimeChange}
+                  onChange={(date) => {
+                    if (!date) return;
+                    
+                    // Ensure end time is at least 1 hour after start time
+                    const minEndTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+                    if (date < minEndTime) {
+                      toast.warn("End time must be at least 1 hour after start time.");
+                      setEndTime(minEndTime);
+                      handleTimeChange(startTime, minEndTime);
+                    } else {
+                      setEndTime(date);
+                      handleTimeChange(startTime, date);
+                    }
+                    
+                    // Clear selected spot when time changes
+                    if (selectedSpotId) {
+                      setSelectedSpotId(null);
+                    }
+                  }}
                   showTimeSelect
                   timeFormat="HH:mm"
                   timeIntervals={60} // 1 hour intervals
@@ -522,6 +558,12 @@ const BookingPage = () => {
           </div>
 
           <div className="mt-8">
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <p className="text-blue-700 text-sm">
+                💳 <strong>Payment First:</strong> Your slot will be reserved only after successful payment
+              </p>
+            </div>
+            
             <button
               onClick={handleBooking}
               disabled={!isBookingValid()}

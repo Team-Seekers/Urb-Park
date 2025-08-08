@@ -4,6 +4,9 @@ import { ICONS } from "../constants";
 import Rating from "./Rating";
 
 const ParkingCard = ({ lot }) => {
+  // Debug: Log features data
+  console.log("ParkingCard - lot features:", lot.features, "type:", typeof lot.features);
+  
   const availabilityRatio = lot.availableSpots / lot.totalSpots;
   const availabilityColor =
     availabilityRatio > 0.5
@@ -11,6 +14,32 @@ const ParkingCard = ({ lot }) => {
       : availabilityRatio > 0.2
       ? "text-yellow-500"
       : "text-red-500";
+
+  // Enhanced feature styling with different colors based on feature type
+  const getFeatureStyle = (feature) => {
+    const featureLower = feature.toLowerCase();
+    
+    if (featureLower.includes('security') || featureLower.includes('cctv') || featureLower.includes('guard')) {
+      return "bg-gradient-to-r from-red-100 to-red-200 text-red-700 border border-red-200";
+    }
+    if (featureLower.includes('ev') || featureLower.includes('electric') || featureLower.includes('charging')) {
+      return "bg-gradient-to-r from-green-100 to-green-200 text-green-700 border border-green-200";
+    }
+    if (featureLower.includes('covered') || featureLower.includes('shelter') || featureLower.includes('roof')) {
+      return "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-700 border border-blue-200";
+    }
+    if (featureLower.includes('wash') || featureLower.includes('clean')) {
+      return "bg-gradient-to-r from-cyan-100 to-cyan-200 text-cyan-700 border border-cyan-200";
+    }
+    if (featureLower.includes('valet') || featureLower.includes('service')) {
+      return "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-700 border border-purple-200";
+    }
+    if (featureLower.includes('24') || featureLower.includes('hour')) {
+      return "bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-700 border border-yellow-200";
+    }
+    // Default style
+    return "bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 border border-gray-200";
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden flex flex-col">
@@ -24,35 +53,45 @@ const ParkingCard = ({ lot }) => {
           <h3 className="text-xl font-bold text-gray-900">{lot.name}</h3>
           <Rating rating={lot.rating} />
         </div>
-        <p className="text-gray-600 mb-4">
+        <p className="text-gray-600 mb-4 flex items-center gap-1">
           {ICONS.LOCATION}
           {lot.address}
         </p>
 
-        {/* Show distance if available */}
+        {/* Enhanced Features Section */}
+        {lot.features && Array.isArray(lot.features) && lot.features.length > 0 ? (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {lot.features.map((feature, index) => (
+              <span
+                key={index}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md cursor-default ${getFeatureStyle(feature)}`}
+              >
+                {feature}
+              </span>
+            ))}
+          </div>
+        ) : lot.features && typeof lot.features === 'string' ? (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {lot.features.split(',').map((feature, index) => (
+              <span
+                key={index}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md cursor-default ${getFeatureStyle(feature.trim())}`}
+              >
+                {feature.trim()}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <p className="text-sm text-gray-400 text-center font-medium">No features available</p>
+          </div>
+        )}
+
+        {/* Distance */}
         {lot.distance !== undefined && (
           <div className="mb-3 p-2 bg-blue-50 rounded-lg">
             <div className="flex items-center text-blue-700 text-sm">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 mr-1"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
+              {ICONS.LOCATION}
               <span className="font-medium">
                 {lot.distance < 1
                   ? `${(lot.distance * 1000).toFixed(0)}m away`
@@ -62,13 +101,8 @@ const ParkingCard = ({ lot }) => {
           </div>
         )}
 
+        {/* Spots & Price */}
         <div className="grid grid-cols-2 gap-4 mb-4 text-sm text-gray-700">
-          <div className="flex items-center">
-            {ICONS.CAR}
-            <span className={availabilityColor}>
-              <strong>{lot.availableSpots}</strong> / {lot.totalSpots} spots
-            </span>
-          </div>
           <div className="flex items-center">
             {ICONS.PRICE}
             <span>
@@ -77,6 +111,7 @@ const ParkingCard = ({ lot }) => {
           </div>
         </div>
 
+        {/* Button */}
         <div className="mt-auto">
           <Link
             to={`/book/${lot.id}`}

@@ -14,7 +14,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { calculateTotalPrice } from "./BookingPage";
 
 const PaymentPage = () => {
-  const { booking, user, setBooking } = useAppContext();
+  const { booking, user, setBooking, addNotification } = useAppContext();
   const navigate = useNavigate();
   const [lot, setLot] = useState(null);
   const [processing, setProcessing] = useState(false);
@@ -171,8 +171,8 @@ const PaymentPage = () => {
                 throw new Error("Slot is no longer available for the selected time period. Please try booking a different slot.");
               }
             } catch (availabilityError) {
-              console.warn("Slot availability check failed:", availabilityError.message);
-              // Continue with booking attempt anyway
+              console.error("Slot availability check failed:", availabilityError.message);
+              throw new Error("Slot availability check failed. Please try again or select a different slot.");
             }
             
             // Try to book the slot with retry logic
@@ -218,6 +218,9 @@ const PaymentPage = () => {
             setProcessing(false);
             setPaid(true);
             toast.success("Payment successful! Booking confirmed.");
+            
+            // Add notification for successful booking
+            addNotification(`Booking confirmed for ${lot?.name || 'Parking Lot'} - Slot ${bookingData.slotId}`);
 
             // Navigate to ticket page regardless of database errors
             setTimeout(() => {
@@ -227,7 +230,23 @@ const PaymentPage = () => {
             console.error("Failed to save booking to database:", error);
             console.error("Error details:", error.message);
             
-            // Still show success and navigate to ticket page even if database save fails
+            // Check if the error is due to slot unavailability
+            if (error.message.includes("no longer available") || error.message.includes("already booked")) {
+              setProcessing(false);
+              setError("The selected slot is no longer available. Your payment will be refunded.");
+              toast.error("The selected slot is no longer available. Your payment will be refunded.");
+              
+              // Add notification for slot unavailability
+              addNotification("Payment refunded - Selected slot was no longer available");
+              
+              // Redirect back to booking page
+              setTimeout(() => {
+                navigate("/find");
+              }, 3000);
+              return;
+            }
+            
+            // For other database errors, still show success and navigate to ticket page
             // This ensures the user gets their ticket even if there are backend issues
             
             // Update booking context with complete information for ticket page
@@ -251,6 +270,9 @@ const PaymentPage = () => {
             setPaid(true);
             toast.success("Payment successful! Booking confirmed.");
             
+            // Add notification for successful booking (fallback case)
+            addNotification(`Booking confirmed for ${lot?.name || 'Parking Lot'} - Slot ${bookingData.slotId}`);
+            
             setTimeout(() => {
               navigate("/ticket");
             }, 2000);
@@ -262,6 +284,13 @@ const PaymentPage = () => {
           setError(errorMessage);
           setProcessing(false);
           toast.error(errorMessage);
+          
+          // If slot is no longer available, redirect back to booking page
+          if (errorMessage.includes("no longer available") || errorMessage.includes("availability check failed")) {
+            setTimeout(() => {
+              navigate("/find");
+            }, 3000);
+          }
         }
       );
 
@@ -340,7 +369,7 @@ const PaymentPage = () => {
             </div>
             <div className="flex justify-between">
               <span>Assigned Spot:</span>
-              <span className="font-semibold">{booking.spotId}</span>
+              <span className="font-semibold">{booking.slotId}</span>
             </div>
             <div className="flex justify-between">
               <span>Vehicle Number:</span>

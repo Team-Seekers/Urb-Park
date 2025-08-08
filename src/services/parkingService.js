@@ -192,6 +192,8 @@ export const fetchAllParkingAreas = async () => {
         status: data.status || "Active",
         createdAt: data.createdAt || Timestamp.now(),
         slots: data.slots || [],
+        features: data.features || [],
+        image: data.image,
         // Convenience properties
         lat: coordinates[0],
         lng: coordinates[1],
@@ -228,6 +230,9 @@ export const fetchParkingAreaById = async (parkingId) => {
       status: data.status,
       createdAt: data.createdAt,
       slots: data.slots || [],
+      features: data.features || [],
+      image: data.image,
+      reviewCount: data.reviewCount,
       lat: coordinates[0],
       lng: coordinates[1],
     };

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { auth } from "../services/Firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
-import { getUserProfile } from "../services/userService";
+import { getUserProfile, addNotification as addNotificationToDB, clearAllNotifications, deleteNotification as deleteNotificationFromDB } from "../services/userService";
 
 /**
  * @typedef {Object} AppContextType
@@ -28,6 +28,8 @@ export const AppProvider = ({ children }) => {
         try {
           const profile = await getUserProfile(user.uid);
           setUserProfile(profile);
+          // Sync notifications from database
+          setNotifications(profile.notifications || []);
         } catch (error) {
           console.error("Error fetching user profile:", error);
         } finally {
@@ -35,18 +37,72 @@ export const AppProvider = ({ children }) => {
         }
       } else {
         setUserProfile(null);
+        setNotifications([]);
       }
     };
 
     fetchUserProfile();
   }, [user]);
 
-  const addNotification = (message) => {
-    setNotifications((prev) => [...prev, message]);
+  const addNotification = async (message) => {
+    if (!user) {
+      // If no user, just add to local state
+      setNotifications((prev) => [...prev, {
+        id: Date.now().toString(),
+        message,
+        timestamp: new Date(),
+        read: false
+      }]);
+      return;
+    }
+
+    try {
+      const result = await addNotificationToDB(user.uid, message);
+      if (result.success) {
+        setNotifications((prev) => [...prev, result.notification]);
+      }
+    } catch (error) {
+      console.error("Error adding notification to database:", error);
+      // Fallback to local state
+      setNotifications((prev) => [...prev, {
+        id: Date.now().toString(),
+        message,
+        timestamp: new Date(),
+        read: false
+      }]);
+    }
   };
 
-  const clearNotifications = () => {
-    setNotifications([]);
+  const clearNotifications = async () => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      await clearAllNotifications(user.uid);
+      setNotifications([]);
+    } catch (error) {
+      console.error("Error clearing notifications from database:", error);
+      // Fallback to local state
+      setNotifications([]);
+    }
+  };
+
+  const deleteNotification = async (notificationId) => {
+    if (!user) {
+      setNotifications((prev) => prev.filter(n => n.id !== notificationId));
+      return;
+    }
+
+    try {
+      await deleteNotificationFromDB(user.uid, notificationId);
+      setNotifications((prev) => prev.filter(n => n.id !== notificationId));
+    } catch (error) {
+      console.error("Error deleting notification from database:", error);
+      // Fallback to local state
+      setNotifications((prev) => prev.filter(n => n.id !== notificationId));
+    }
   };
 
   const value = {
@@ -55,6 +111,7 @@ export const AppProvider = ({ children }) => {
     notifications,
     addNotification,
     clearNotifications,
+    deleteNotification,
     user,
     loading,
     error,
