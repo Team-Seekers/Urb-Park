@@ -177,7 +177,12 @@ export const fetchAllParkingAreas = async () => {
     const querySnapshot = await getDocs(collection(db, "parkingAreas"));
     const parkingAreas = querySnapshot.docs.map((doc) => {
       const data = doc.data();
-      const coordinates = parseCoordinates(data.coordinates);
+      // Accept both `coordinates` and `location` as coordinate sources
+      const rawCoordinates =
+        data.coordinates !== undefined && data.coordinates !== null
+          ? data.coordinates
+          : data.location;
+      const coordinates = parseCoordinates(rawCoordinates);
       
       return {
         id: doc.id,
@@ -216,7 +221,11 @@ export const fetchParkingAreaById = async (parkingId) => {
     if (!parkingSnap.exists()) return null;
     
     const data = parkingSnap.data();
-    const coordinates = parseCoordinates(data.coordinates);
+    const rawCoordinates =
+      data.coordinates !== undefined && data.coordinates !== null
+        ? data.coordinates
+        : data.location;
+    const coordinates = parseCoordinates(rawCoordinates);
     
     return {
       id: parkingSnap.id,
@@ -251,7 +260,11 @@ export const createParkingArea = async (parkingData) => {
     const newParkingArea = {
       name: parkingData.name,
       address: parkingData.address,
-      coordinates: parseCoordinates(parkingData.coordinates),
+      coordinates: parseCoordinates(
+        parkingData.coordinates !== undefined && parkingData.coordinates !== null
+          ? parkingData.coordinates
+          : parkingData.location
+      ),
       totalSpots: totalSpots,
       availableSpots: totalSpots,
       pricePerHour: parkingData.pricePerHour || 50,
@@ -282,8 +295,15 @@ export const updateParkingArea = async (parkingId, updateData) => {
     const updatePayload = { ...updateData };
     
     // Parse coordinates if provided
-    if (updateData.coordinates) {
-      updatePayload.coordinates = parseCoordinates(updateData.coordinates);
+    if (
+      Object.prototype.hasOwnProperty.call(updateData, "coordinates") ||
+      Object.prototype.hasOwnProperty.call(updateData, "location")
+    ) {
+      const rawCoordinates =
+        updateData.coordinates !== undefined && updateData.coordinates !== null
+          ? updateData.coordinates
+          : updateData.location;
+      updatePayload.coordinates = parseCoordinates(rawCoordinates);
     }
     
     await updateDoc(parkingRef, updatePayload);

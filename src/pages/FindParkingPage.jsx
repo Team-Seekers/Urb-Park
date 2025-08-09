@@ -32,15 +32,22 @@ const FindParkingPage = () => {
   const fetchData = async (isInitialLoad = false) => {
     if (isInitialLoad) setLoading(true);
     try {
-      console.log("🔍 Fetching parking data...");
-      const data = await fetchAllParkingAreas();
-      console.log("📊 Received parking data:", data);
-      console.log("📊 Number of parking areas:", data.length);
-      setLots(data);
-      if (isInitialLoad) setLoading(false);
+      if (showNearbyOnly) {
+        // Keep nearby view consistent during refresh
+        const nearbyAreas = await getNearbyParkingAreas(5);
+        setLots(nearbyAreas);
+        setFilteredLots(nearbyAreas);
+      } else {
+        console.log("🔍 Fetching parking data...");
+        const data = await fetchAllParkingAreas();
+        console.log("📊 Received parking data:", data);
+        console.log("📊 Number of parking areas:", data.length);
+        setLots(data);
+      }
     } catch (error) {
       console.error("❌ Error fetching parking data:", error);
       setError("Failed to fetch parking data");
+    } finally {
       if (isInitialLoad) setLoading(false);
     }
   };
@@ -49,7 +56,7 @@ const FindParkingPage = () => {
     fetchData(true);
     const intervalId = setInterval(() => fetchData(false), 5000); // Refresh data every 5 seconds
     return () => clearInterval(intervalId);
-  }, []);
+  }, [showNearbyOnly]);
 
   useEffect(() => {
     let results = lots.filter(

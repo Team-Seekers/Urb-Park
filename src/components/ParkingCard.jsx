@@ -2,7 +2,25 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ICONS } from "../constants";
 import Rating from "./Rating";
+const decision = (lot) => {
+  const address = (lot.address||"").trim();
+  if(address == "Bengaluru"){
+    return "https://content.jdmagicbox.com/comp/def_content/car-parking-management/cars-parked-in-parking-lot-car-parking-management-1-0stjw.jpg"
 
+  }else if(address == "Chennai"){
+    return "https://media.istockphoto.com/id/172385575/photo/parking.jpg?s=612x612&w=0&k=20&c=nJorPk_qIMe46mLqdX1aDMu1alojHK7oKPOaAbOzQLM="
+  }else if(address == "Hyderabad"){
+    return "https://watermark.lovepik.com/photo/20211202/large/lovepik-parking-lot-picture_501404976.jpg"
+  }
+  else if(address == "Delhi"){
+    return "https://media.istockphoto.com/id/578832718/photo/public-garage.jpg?s=612x612&w=0&k=20&c=sH5-S64sgWBBU-trmC-LE5IwShx_Xlu1kTRDOczmgzE="
+  }else if(address == "Mumbai"){
+    return "https://cdn.dnaindia.com/sites/default/files/2019/08/14/858787-underground-parking.jpg?im=FitAndFill=(1200,900)"
+  }
+  else{
+    return lot.image
+  }
+}
 const ParkingCard = ({ lot }) => {
   // Debug: Log features data
   console.log("ParkingCard - lot features:", lot.features, "type:", typeof lot.features);
@@ -42,12 +60,14 @@ const ParkingCard = ({ lot }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden flex flex-col">
+    <div className="bg-white rounded-lg shadow-lg hover:shadow-2xl hover:scale-105 transition duration-300 overflow-hidden flex flex-col">
       <img
-        src={lot.image}
-        alt={lot.name}
-        className="w-full h-48 object-cover"
+       src={decision(lot)}
+       alt={lot.name}
+      className="w-full h-48 object-cover"
       />
+
+
       <div className="p-4 flex flex-col flex-grow">
         <div className="flex justify-between items-start mb-2">
           <h3 className="text-xl font-bold text-gray-900">{lot.name}</h3>

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Anim1 from "../components/Animate";
 /* import HeroIllustration from '../components/HeroIllustration'; */
 
 const HomePage = ({ user, onProtectedNav }) => {
@@ -41,6 +42,8 @@ const HomePage = ({ user, onProtectedNav }) => {
             <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-4">
               Your Parking Spot, <br /> In a Tap.
             </h1>
+            <br></br>
+            <br></br>
             <p className="text-lg text-gray-600 max-w-xl mx-auto md:mx-0 mb-8">
               No more circling. Find, book, and pay for your parking space in
               seconds with real-time availability.
@@ -78,7 +81,9 @@ const HomePage = ({ user, onProtectedNav }) => {
               </div>
             </form>
           </div>
-          <div className="hidden md:block">{/* <HeroIllustration /> */}</div>
+          <div className="hidden md:block flex justify-center items-center border-4 border-yellow-400 rounded-lg overflow-hidden">
+            <Anim1 />
+          </div>
         </div>
       </section>
 
@@ -92,7 +97,7 @@ const HomePage = ({ user, onProtectedNav }) => {
           time.
         </p>
         <div className="flex flex-col lg:flex-row lg:flex-nowrap gap-8 text-left mx-auto">
-          <div className="bg-white p-8 rounded-lg shadow-lg flex items-start space-x-4 md:w-25">
+          <div className="bg-white p-8 rounded-lg shadow-lg hover:shadow-2xl hover:scale-105 transition duration-300 flex items-start space-x-4 md:w-25">
             <div className="flex-shrink-0 bg-green-100 text-green-600 rounded-full p-3 mt-1">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -119,7 +124,7 @@ const HomePage = ({ user, onProtectedNav }) => {
               </p>
             </div>
           </div>
-          <div className="bg-white p-8 rounded-lg shadow-lg flex items-start space-x-4 md:w-25">
+          <div className="bg-white p-8 rounded-lg shadow-lg hover:shadow-2xl hover:scale-105 transition duration-300 flex items-start space-x-4 md:w-25">
             <div className="flex-shrink-0 bg-yellow-100 text-yellow-400 rounded-full p-3 mt-1">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -144,7 +149,7 @@ const HomePage = ({ user, onProtectedNav }) => {
               </p>
             </div>
           </div>
-          <div className="bg-white p-8 rounded-lg shadow-lg flex items-start space-x-4 md:w-25">
+          <div className="bg-white p-8 rounded-lg shadow-lg hover:shadow-2xl hover:scale-105 transition duration-300 flex items-start space-x-4 md:w-25">
             <div className="flex-shrink-0 bg-blue-100 text-blue-500 rounded-full p-3 mt-1">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -170,7 +175,7 @@ const HomePage = ({ user, onProtectedNav }) => {
               </p>
             </div>
           </div>
-          <div className="bg-white p-8 rounded-lg shadow-lg flex items-start space-x-4 md:w-25">
+          <div className="bg-white p-8 rounded-lg shadow-lg hover:shadow-2xl hover:scale-105 transition duration-300 flex items-start space-x-4 md:w-25">
             <div className="flex-shrink-0 bg-cyan-100 text-cyan-600 rounded-full p-3 mt-1">
               <svg
                 xmlns="http://www.w3.org/2000/svg"

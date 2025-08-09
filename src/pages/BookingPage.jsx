@@ -345,9 +345,9 @@ const BookingPage = () => {
   console.log("BookingPage - lot features:", lot?.features, "type:", typeof lot?.features);
 
   return (
-    <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
-      <div className="grid md:grid-cols-5">
-        <div className="md:col-span-3 p-8 md:p-12">
+    <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
+      <div className="">
+        <div className=" p-8 md:p-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">{lot.name}</h1>
           <div className="text-gray-600 mb-4 flex items-center">
             {ICONS.LOCATION}
@@ -582,12 +582,12 @@ const BookingPage = () => {
             )}
           </div>
         </div>
-        <div className="hidden md:block md:col-span-2">
-          <img
+        <div className="hidden md:block ">
+          {/* <img
             src={lot.image?.replace("400/300", "800/1200") || "https://picsum.photos/800/1200"}
             alt={lot.name}
             className="w-full h-full object-cover"
-          />
+          /> */}
         </div>
       </div>
       <div className="bg-gray-50 p-8">
