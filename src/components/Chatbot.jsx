@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { getBotResponseStream } from "../services/geminiService";
 import { ICONS } from "../constants";
+import { useNavigate } from "react-router-dom";
 
 const Chatbot = () => {
+  const navigate = useNavigate();
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -28,6 +30,86 @@ const Chatbot = () => {
     }
   }, [isOpen, messages.length]);
 
+  const toTitleCaseSingleWord = (word) => {
+    if (!word) return "";
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  };
+
+  const extractBookingIntent = (text) => {
+    if (!text) return null;
+    const lower = text.toLowerCase();
+    if (!lower.includes("book") || !lower.includes("ticket")) return null;
+
+    // Try to extract city after "for" up to "on"/"from"/end
+    let city = null;
+    const forMatch = /\bfor\s+([^,\n]+?)(?:\s+on|\s+from|\.|,|$)/i.exec(text);
+    if (forMatch && forMatch[1]) {
+      city = forMatch[1].trim();
+      // Keep only first word for city name for safety
+      city = city.split(/\s+/)[0];
+      city = toTitleCaseSingleWord(city);
+    }
+
+    // Extract date (YYYY-MM-DD) if present
+    let dateStr = null;
+    const dateMatch = /(\d{4}-\d{2}-\d{2})/.exec(text);
+    if (dateMatch) {
+      dateStr = dateMatch[1];
+    }
+
+    // Extract time range: from HH:MM to HH:MM (24h or 12h with am/pm)
+    let startTimeStr = null;
+    let endTimeStr = null;
+    const timeRangeMatch = /from\s+([0-2]?\d(?::\d{2})?\s*(?:am|pm)?)\s+to\s+([0-2]?\d(?::\d{2})?\s*(?:am|pm)?)/i.exec(
+      text
+    );
+    if (timeRangeMatch) {
+      startTimeStr = timeRangeMatch[1].toLowerCase();
+      endTimeStr = timeRangeMatch[2].toLowerCase();
+    }
+
+    if (!city) return null;
+
+    // Build ISO start/end using today if date missing
+    const baseDate = dateStr ? new Date(dateStr) : new Date();
+    const to24h = (t) => {
+      if (!t) return null;
+      const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(t.trim());
+      if (!m) return null;
+      let h = parseInt(m[1], 10);
+      const min = m[2] ? parseInt(m[2], 10) : 0;
+      const ampm = m[3];
+      if (ampm === "pm" && h < 12) h += 12;
+      if (ampm === "am" && h === 12) h = 0;
+      return { h, min };
+    };
+
+    let startISO = null;
+    let endISO = null;
+    if (startTimeStr && endTimeStr) {
+      const s = to24h(startTimeStr);
+      const e = to24h(endTimeStr);
+      if (s && e) {
+        const start = new Date(baseDate);
+        start.setHours(s.h, s.min, 0, 0);
+        const end = new Date(baseDate);
+        end.setHours(e.h, e.min, 0, 0);
+        if (end <= start) {
+          // If end before start, assume end is next day
+          end.setDate(end.getDate() + 1);
+        }
+        startISO = start.toISOString();
+        endISO = end.toISOString();
+      }
+    }
+
+    return {
+      city,
+      startISO,
+      endISO,
+    };
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -46,6 +128,22 @@ const Chatbot = () => {
       ...prev,
       { id: botMessageId, text: "", sender: "bot" },
     ]);
+
+    // Try to detect booking intent and navigate
+    try {
+      const intent = extractBookingIntent(input);
+      if (intent && intent.city) {
+        const params = new URLSearchParams();
+        params.set("city", intent.city);
+        if (intent.startISO && intent.endISO) {
+          params.set("start", intent.startISO);
+          params.set("end", intent.endISO);
+        }
+        navigate(`/find?${params.toString()}`);
+      }
+    } catch (_) {
+      // ignore intent parse errors
+    }
 
     let fullResponse = "";
     try {

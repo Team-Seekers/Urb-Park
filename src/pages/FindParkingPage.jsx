@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   getNearbyParkingAreas,
   fetchAllParkingAreas,
+  searchParkingAreas,
+  searchParkingAreasWithAvailability,
 } from "../services/parkingService";
 import ParkingCard from "../components/ParkingCard";
 import Spinner from "../components/Spinner";
@@ -17,10 +20,11 @@ const ALL_FEATURES = [
 ];
 
 const FindParkingPage = () => {
+  const location = useLocation();
   const [lots, setLots] = useState([]);
   const [filteredLots, setFilteredLots] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(""); // Initialize as empty string
   const [priceFilter, setPriceFilter] = useState(100);
   const [ratingFilter, setRatingFilter] = useState(0);
   const [featuresFilter, setFeaturesFilter] = useState([]);
@@ -28,6 +32,8 @@ const FindParkingPage = () => {
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [showNearbyOnly, setShowNearbyOnly] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [queryMode, setQueryMode] = useState(false);
+  const [routeFilter, setRouteFilter] = useState({ city: "", start: null, end: null });
 
   const fetchData = async (isInitialLoad = false) => {
     if (isInitialLoad) setLoading(true);
@@ -37,6 +43,23 @@ const FindParkingPage = () => {
         const nearbyAreas = await getNearbyParkingAreas(5);
         setLots(nearbyAreas);
         setFilteredLots(nearbyAreas);
+      } else if (queryMode && routeFilter.city) {
+        // Keep query mode consistent during refresh
+        if (routeFilter.start && routeFilter.end) {
+          let results = await searchParkingAreasWithAvailability(
+            routeFilter.city,
+            routeFilter.start,
+            routeFilter.end
+          );
+          // Show only arenas with availability
+          results = results.filter((a) => (a.availableSpotsForTime || 0) > 0);
+          setLots(results);
+          setFilteredLots(results);
+        } else {
+          const results = await searchParkingAreas(routeFilter.city);
+          setLots(results);
+          setFilteredLots(results);
+        }
       } else {
         console.log("🔍 Fetching parking data...");
         const data = await fetchAllParkingAreas();
@@ -46,17 +69,76 @@ const FindParkingPage = () => {
       }
     } catch (error) {
       console.error("❌ Error fetching parking data:", error);
-      setError("Failed to fetch parking data");
+      // setError("Failed to fetch parking data"); // Note: setError is not defined in your original code
     } finally {
       if (isInitialLoad) setLoading(false);
     }
   };
 
+  // Handle URL parameters on component mount and when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const searchParam = params.get("search");
+    const rawCity = params.get("city");
+    const start = params.get("start");
+    const end = params.get("end");
+
+    const toTitleCaseSingleWord = (word) => {
+      if (!word) return "";
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    };
+
+    const city = rawCity ? toTitleCaseSingleWord(rawCity) : "";
+
+    // Handle search parameter from homepage
+    if (searchParam) {
+      const decodedSearch = decodeURIComponent(searchParam);
+      setSearchTerm(decodedSearch);
+      // Automatically search when coming from homepage
+      setShowNearbyOnly(false);
+      setQueryMode(false);
+    }
+
+    // Handle chatbot route params: /find?city=Name&start=iso&end=iso
+    if (city) {
+      setQueryMode(true);
+      setShowNearbyOnly(false);
+      setSearchTerm(city);
+      setRouteFilter({ city, start, end });
+
+      const run = async () => {
+        setLoading(true);
+        try {
+          if (start && end) {
+            let results = await searchParkingAreasWithAvailability(city, start, end);
+            results = results.filter((a) => (a.availableSpotsForTime || 0) > 0);
+            setLots(results);
+            setFilteredLots(results);
+          } else {
+            const results = await searchParkingAreas(city);
+            setLots(results);
+            setFilteredLots(results);
+          }
+        } catch (err) {
+          console.error("Error applying route search:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      run();
+    } else if (!searchParam) {
+      // No query params at all
+      setQueryMode(false);
+      setRouteFilter({ city: "", start: null, end: null });
+      setSearchTerm("");
+    }
+  }, [location.search]);
+
   useEffect(() => {
     fetchData(true);
     const intervalId = setInterval(() => fetchData(false), 5000); // Refresh data every 5 seconds
     return () => clearInterval(intervalId);
-  }, [showNearbyOnly]);
+  }, [showNearbyOnly, queryMode, routeFilter.city, routeFilter.start, routeFilter.end]);
 
   useEffect(() => {
     let results = lots.filter(
@@ -110,6 +192,7 @@ const FindParkingPage = () => {
     try {
       setSearchLoading(true);
       setShowNearbyOnly(false);
+      setQueryMode(false); // Exit query mode when manually searching
       const allAreas = await fetchAllParkingAreas();
       // Filter areas by search term
       const matchingAreas = allAreas.filter(
@@ -132,6 +215,7 @@ const FindParkingPage = () => {
     // If search term is cleared, show all parking
     if (!e.target.value.trim()) {
       setShowNearbyOnly(false);
+      setQueryMode(false);
       fetchData(true);
     }
   };

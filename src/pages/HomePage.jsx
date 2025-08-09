@@ -73,7 +73,9 @@ const HomePage = ({ user, onProtectedNav }) => {
                   aria-label="Search for parking"
                 />
                 <button
-                  onClick={() => handleNavClick("/find")}
+                  onClick={() => {handleNavClick("/find");
+
+                  }}
                   className="bg-yellow-400 whitespace-nowrap hover:bg-yellow-300 text-gray-900 font-bold py-3 px-6 rounded-md text-lg transition-transform transform hover:scale-105 shadow-sm"
                 >
                   Find Parking Now
