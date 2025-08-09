@@ -21,6 +21,24 @@ export const AppProvider = ({ children }) => {
   const [profileLoading, setProfileLoading] = useState(false);
 
   // Fetch user profile when user changes
+
+  useEffect(() => {
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/api/notifications");
+      const data = await res.json();
+      setNotifications(data);
+    } catch (err) {
+      console.error("Error fetching notifications", err);
+    }
+  };
+
+  fetchNotifications();
+  const interval = setInterval(fetchNotifications, 5000); // refresh every 5s
+
+  return () => clearInterval(interval);
+}, []);
+
   useEffect(() => {
     const fetchUserProfile = async () => {
       if (user) {
