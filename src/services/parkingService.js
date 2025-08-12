@@ -17,7 +17,7 @@ import {
   limit,
   runTransaction,
 } from "firebase/firestore";
-import { db } from "./Firebase";
+import { db } from "./firebase";
 
 // ===== UTILITY FUNCTIONS =====
 
