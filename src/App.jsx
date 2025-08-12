@@ -8,7 +8,6 @@ import FindParkingPage from "./pages/FindParkingPage";
 import BookingPage from "./pages/BookingPage";
 import TicketPage from "./pages/TicketPage";
 import ProfilePage from "./pages/ProfilePage";
-import ManagerDashboard from "./pages/ManagerDashboard";
 import NotFoundPage from "./pages/NotFoundPage";
 import Chatbot from "./components/Chatbot";
 import PaymentPage from "./pages/PaymentPage";
@@ -17,6 +16,7 @@ import "react-toastify/dist/ReactToastify.css";
 import AuthModal from "./components/AuthModal";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, db } from "./services/Firebase";
+
 
 const App = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -39,15 +39,13 @@ const App = () => {
     if (user) {
       window.location.hash = `#${redirectPath}`;
     }
-
-    
-
   };
 
   return (
     <HashRouter>
       <AppProvider>
         <ToastContainer />
+       
         <AuthModal
           open={authModalOpen}
           onClose={() => setAuthModalOpen(false)}
@@ -67,16 +65,7 @@ const App = () => {
                   <HomePage user={user} onProtectedNav={handleProtectedNav} />
                 }
               />
-              <Route
-                path="/manager-dashboard"
-                element={
-                  user ? (
-                    <ManagerDashboard />
-                  ) : (
-                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
-                  )
-                }
-              />
+            
               {/* All other routes are protected */}
               <Route
                 path="/find"
@@ -123,16 +112,6 @@ const App = () => {
                 element={
                   user ? (
                     <ProfilePage />
-                  ) : (
-                    <HomePage user={user} onProtectedNav={handleProtectedNav} />
-                  )
-                }
-              />
-              <Route
-                path="/manager-dashboard/:id"
-                element={
-                  user ? (
-                    <ManagerDashboard />
                   ) : (
                     <HomePage user={user} onProtectedNav={handleProtectedNav} />
                   )

@@ -1,4 +1,11 @@
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+} from "firebase/firestore";
 import { db } from "./Firebase";
 
 // Get user profile with role information
@@ -6,7 +13,7 @@ export const getUserProfile = async (uid) => {
   try {
     const userRef = doc(db, "users", uid);
     const userDoc = await getDoc(userRef);
-    
+
     if (userDoc.exists()) {
       return userDoc.data();
     } else {
@@ -17,7 +24,7 @@ export const getUserProfile = async (uid) => {
         createdAt: new Date(),
         history: [],
         notifications: [], // Add notifications array
-        profileComplete: false
+        profileComplete: false,
       };
       await setDoc(userRef, defaultProfile);
       return defaultProfile;
@@ -34,7 +41,7 @@ export const updateUserRole = async (uid, newRole) => {
     const userRef = doc(db, "users", uid);
     await updateDoc(userRef, {
       role: newRole,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     });
     return { success: true };
   } catch (error) {
@@ -61,14 +68,14 @@ export const updateUserProfile = async (uid, profileData) => {
     await updateDoc(userRef, {
       ...profileData,
       updatedAt: new Date(),
-      profileComplete: true
+      profileComplete: true,
     });
     return { success: true };
   } catch (error) {
     console.error("Error updating user profile:", error);
     throw error;
   }
-}; 
+};
 
 // Add notification to user profile
 export const addNotification = async (uid, notification) => {
@@ -78,13 +85,13 @@ export const addNotification = async (uid, notification) => {
       id: Date.now().toString(),
       message: notification,
       timestamp: new Date(),
-      read: false
+      read: false,
     };
-    
+
     await updateDoc(userRef, {
-      notifications: arrayUnion(notificationData)
+      notifications: arrayUnion(notificationData),
     });
-    
+
     return { success: true, notification: notificationData };
   } catch (error) {
     console.error("Error adding notification:", error);
@@ -108,7 +115,7 @@ export const clearAllNotifications = async (uid) => {
   try {
     const userRef = doc(db, "users", uid);
     await updateDoc(userRef, {
-      notifications: []
+      notifications: [],
     });
     return { success: true };
   } catch (error) {
@@ -123,17 +130,17 @@ export const markNotificationAsRead = async (uid, notificationId) => {
     const userRef = doc(db, "users", uid);
     const profile = await getUserProfile(uid);
     const notifications = profile.notifications || [];
-    
-    const updatedNotifications = notifications.map(notification => 
-      notification.id === notificationId 
+
+    const updatedNotifications = notifications.map((notification) =>
+      notification.id === notificationId
         ? { ...notification, read: true }
         : notification
     );
-    
+
     await updateDoc(userRef, {
-      notifications: updatedNotifications
+      notifications: updatedNotifications,
     });
-    
+
     return { success: true };
   } catch (error) {
     console.error("Error marking notification as read:", error);
@@ -147,15 +154,15 @@ export const deleteNotification = async (uid, notificationId) => {
     const userRef = doc(db, "users", uid);
     const profile = await getUserProfile(uid);
     const notifications = profile.notifications || [];
-    
-    const updatedNotifications = notifications.filter(notification => 
-      notification.id !== notificationId
+
+    const updatedNotifications = notifications.filter(
+      (notification) => notification.id !== notificationId
     );
-    
+
     await updateDoc(userRef, {
-      notifications: updatedNotifications
+      notifications: updatedNotifications,
     });
-    
+
     return { success: true };
   } catch (error) {
     console.error("Error deleting notification:", error);
@@ -169,20 +176,20 @@ export const deleteHistoryEntry = async (uid, historyIndex) => {
     const userRef = doc(db, "users", uid);
     const profile = await getUserProfile(uid);
     const history = profile.history || [];
-    
+
     if (historyIndex < 0 || historyIndex >= history.length) {
       throw new Error("Invalid history index");
     }
-    
+
     const updatedHistory = history.filter((_, index) => index !== historyIndex);
-    
+
     await updateDoc(userRef, {
-      history: updatedHistory
+      history: updatedHistory,
     });
-    
+
     return { success: true };
   } catch (error) {
     console.error("Error deleting history entry:", error);
     throw error;
   }
-}; 
+};

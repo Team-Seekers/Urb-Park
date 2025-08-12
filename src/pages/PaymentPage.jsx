@@ -49,12 +49,14 @@ const PaymentPage = () => {
         throw new Error("User not authenticated");
       }
 
-             // Calculate total amount based on booking time
-       const startTime = new Date(booking.startTime);
-       const endTime = new Date(booking.endTime);
-       const hoursDiff = (endTime - startTime) / (1000 * 60 * 60);
-       const amountToPay = Math.round((lot.pricePerHour || 20) * hoursDiff * 100); // Convert to paisa and ensure integer
-      
+      // Calculate total amount based on booking time
+      const startTime = new Date(booking.startTime);
+      const endTime = new Date(booking.endTime);
+      const hoursDiff = (endTime - startTime) / (1000 * 60 * 60);
+      const amountToPay = Math.round(
+        (lot.pricePerHour || 20) * hoursDiff * 100
+      ); // Convert to paisa and ensure integer
+
       // Prepare booking data for Razorpay
       const bookingData = {
         lotName: lot?.name || "Parking Lot", // Use lot name from lot data
@@ -64,7 +66,7 @@ const PaymentPage = () => {
         customerName: user?.displayName || "Customer",
         customerEmail: user?.email || "customer@example.com",
         customerPhone: user?.phoneNumber || "",
-                 amount: amountToPay, // Amount is already in paisa as integer
+        amount: amountToPay, // Amount is already in paisa as integer
         uid: uid,
       };
 
@@ -79,7 +81,7 @@ const PaymentPage = () => {
             console.log("Payment response:", paymentResponse);
             console.log("Booking data:", bookingData);
             console.log("Booking context:", booking);
-            
+
             // Validate booking data
             if (!bookingData.lotId) {
               throw new Error("Missing lot ID in booking data");
@@ -90,12 +92,14 @@ const PaymentPage = () => {
             if (!bookingData.uid) {
               throw new Error("Missing user ID in booking data");
             }
-            
+
             // Check if user is authenticated
             if (!bookingData.uid || bookingData.uid === "guest") {
-              throw new Error("User not authenticated. Please login to complete booking.");
+              throw new Error(
+                "User not authenticated. Please login to complete booking."
+              );
             }
-            
+
             // Payment successful - now add to database
             // Use the actual booking times from the booking context
             const dbBookingData = {
@@ -110,16 +114,19 @@ const PaymentPage = () => {
             console.log("Saving to user history...");
             // Add to user history
             try {
-              const historyResult = await addBookingToUserHistory(bookingData.uid, {
-                areaId: bookingData.lotId,
-                slotId: bookingData.slotId, // Changed from spotId to slotId
-                startTime: booking.startTime, // Use actual booking start time
-                endTime: booking.endTime, // Use actual booking end time
-                vehicleNumber: bookingData.vehicleNumber,
-                paymentId: paymentResponse.razorpay_payment_id,
-                orderId: paymentResponse.razorpay_order_id
-              });
-              
+              const historyResult = await addBookingToUserHistory(
+                bookingData.uid,
+                {
+                  areaId: bookingData.lotId,
+                  slotId: bookingData.slotId, // Changed from spotId to slotId
+                  startTime: booking.startTime, // Use actual booking start time
+                  endTime: booking.endTime, // Use actual booking end time
+                  vehicleNumber: bookingData.vehicleNumber,
+                  paymentId: paymentResponse.razorpay_payment_id,
+                  orderId: paymentResponse.razorpay_order_id,
+                }
+              );
+
               if (historyResult.success) {
                 console.log("User history saved successfully");
               } else {
@@ -130,7 +137,7 @@ const PaymentPage = () => {
               console.warn("Failed to save to user history:", historyError);
               // Continue with parking slot booking even if user history fails
             }
-            
+
             console.log("Saving to parking area slots...");
             // Add to parking area slots
             const slotBookingData = {
@@ -142,7 +149,7 @@ const PaymentPage = () => {
               paymentComplete: true,
               paymentId: paymentResponse.razorpay_payment_id || null,
               orderId: paymentResponse.razorpay_order_id || null,
-              createdAt: new Date()
+              createdAt: new Date(),
             };
 
             // Validate slot booking data
@@ -157,47 +164,61 @@ const PaymentPage = () => {
             }
 
             console.log("Slot booking data:", slotBookingData);
-            
+
             // Check slot availability one more time before booking
             try {
               const slotAvailability = await getSlotAvailabilityWithBookings(
-                bookingData.lotId, 
+                bookingData.lotId,
                 bookingData.slotId, // Changed from spotId to slotId
-                new Date(booking.startTime), 
+                new Date(booking.startTime),
                 new Date(booking.endTime)
               );
-              
+
               if (!slotAvailability.isAvailable) {
-                throw new Error("Slot is no longer available for the selected time period. Please try booking a different slot.");
+                throw new Error(
+                  "Slot is no longer available for the selected time period. Please try booking a different slot."
+                );
               }
             } catch (availabilityError) {
-              console.error("Slot availability check failed:", availabilityError.message);
-              throw new Error("Slot availability check failed. Please try again or select a different slot.");
+              console.error(
+                "Slot availability check failed:",
+                availabilityError.message
+              );
+              throw new Error(
+                "Slot availability check failed. Please try again or select a different slot."
+              );
             }
-            
+
             // Try to book the slot with retry logic
             let bookingSuccess = false;
             let retryCount = 0;
             const maxRetries = 3;
-            
+
             while (!bookingSuccess && retryCount < maxRetries) {
               try {
-                await bookParkingSlotAfterPayment(bookingData.lotId, bookingData.slotId, slotBookingData); // Changed from spotId to slotId
+                await bookParkingSlotAfterPayment(
+                  bookingData.lotId,
+                  bookingData.slotId,
+                  slotBookingData
+                ); // Changed from spotId to slotId
                 bookingSuccess = true;
                 console.log("Parking slot booking saved successfully");
               } catch (bookingError) {
                 retryCount++;
-                console.warn(`Booking attempt ${retryCount} failed:`, bookingError.message);
-                
+                console.warn(
+                  `Booking attempt ${retryCount} failed:`,
+                  bookingError.message
+                );
+
                 if (retryCount >= maxRetries) {
                   throw bookingError;
                 }
-                
+
                 // Wait a bit before retrying
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise((resolve) => setTimeout(resolve, 1000));
               }
             }
-            
+
             // Update booking context with complete information for ticket page
             const updatedBooking = {
               ...booking,
@@ -214,13 +235,17 @@ const PaymentPage = () => {
 
             // Update the booking context
             setBooking(updatedBooking);
-            
+
             setProcessing(false);
             setPaid(true);
             toast.success("Payment successful! Booking confirmed.");
-            
+
             // Add notification for successful booking
-            addNotification(`Booking confirmed for ${lot?.name || 'Parking Lot'} - Slot ${bookingData.slotId}`);
+            addNotification(
+              `Booking confirmed for ${lot?.name || "Parking Lot"} - Slot ${
+                bookingData.slotId
+              }`
+            );
 
             // Navigate to ticket page regardless of database errors
             setTimeout(() => {
@@ -229,26 +254,35 @@ const PaymentPage = () => {
           } catch (error) {
             console.error("Failed to save booking to database:", error);
             console.error("Error details:", error.message);
-            
+
             // Check if the error is due to slot unavailability
-            if (error.message.includes("no longer available") || error.message.includes("already booked")) {
+            if (
+              error.message.includes("no longer available") ||
+              error.message.includes("already booked")
+            ) {
               setProcessing(false);
-              setError("The selected slot is no longer available. Your payment will be refunded.");
-              toast.error("The selected slot is no longer available. Your payment will be refunded.");
-              
+              setError(
+                "The selected slot is no longer available. Your payment will be refunded."
+              );
+              toast.error(
+                "The selected slot is no longer available. Your payment will be refunded."
+              );
+
               // Add notification for slot unavailability
-              addNotification("Payment refunded - Selected slot was no longer available");
-              
+              addNotification(
+                "Payment refunded - Selected slot was no longer available"
+              );
+
               // Redirect back to booking page
               setTimeout(() => {
                 navigate("/find");
               }, 3000);
               return;
             }
-            
+
             // For other database errors, still show success and navigate to ticket page
             // This ensures the user gets their ticket even if there are backend issues
-            
+
             // Update booking context with complete information for ticket page
             const updatedBooking = {
               ...booking,
@@ -265,14 +299,18 @@ const PaymentPage = () => {
 
             // Update the booking context
             setBooking(updatedBooking);
-            
+
             setProcessing(false);
             setPaid(true);
             toast.success("Payment successful! Booking confirmed.");
-            
+
             // Add notification for successful booking (fallback case)
-            addNotification(`Booking confirmed for ${lot?.name || 'Parking Lot'} - Slot ${bookingData.slotId}`);
-            
+            addNotification(
+              `Booking confirmed for ${lot?.name || "Parking Lot"} - Slot ${
+                bookingData.slotId
+              }`
+            );
+
             setTimeout(() => {
               navigate("/ticket");
             }, 2000);
@@ -284,16 +322,18 @@ const PaymentPage = () => {
           setError(errorMessage);
           setProcessing(false);
           toast.error(errorMessage);
-          
+
           // If slot is no longer available, redirect back to booking page
-          if (errorMessage.includes("no longer available") || errorMessage.includes("availability check failed")) {
+          if (
+            errorMessage.includes("no longer available") ||
+            errorMessage.includes("availability check failed")
+          ) {
             setTimeout(() => {
               navigate("/find");
             }, 3000);
           }
         }
       );
-
     } catch (error) {
       console.error("Payment initialization failed:", error);
       setError("Failed to initialize payment. Please try again.");
@@ -311,7 +351,7 @@ const PaymentPage = () => {
   }
 
   const isPayAsYouGo = booking.paymentMethod === "PAY_AS_YOU_GO";
-  
+
   // Calculate total price based on booking time if available (for display only)
   const calculateDisplayAmount = () => {
     if (booking.startTime && booking.endTime) {
@@ -322,7 +362,7 @@ const PaymentPage = () => {
     }
     return lot?.pricePerHour || 20;
   };
-  
+
   const displayAmount = calculateDisplayAmount();
 
   if (paid) {
@@ -383,17 +423,15 @@ const PaymentPage = () => {
             </div>
             {isPayAsYouGo && (
               <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm">
-                A refundable deposit is required for Pay-as-you-go bookings. This
-                amount will be adjusted against your final bill.
+                A refundable deposit is required for Pay-as-you-go bookings.
+                This amount will be adjusted against your final bill.
               </div>
             )}
             <div className="border-t my-4"></div>
-                         <div className="flex justify-between text-xl font-bold">
-               <span>
-                 {isPayAsYouGo ? "Deposit Amount:" : "Total Amount:"}
-               </span>
-               <span>₹{displayAmount.toFixed(2)}</span>
-             </div>
+            <div className="flex justify-between text-xl font-bold">
+              <span>{isPayAsYouGo ? "Deposit Amount:" : "Total Amount:"}</span>
+              <span>₹{displayAmount.toFixed(2)}</span>
+            </div>
           </div>
         </div>
 
@@ -414,9 +452,9 @@ const PaymentPage = () => {
                 disabled={processing}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400"
               >
-                                 {processing
-                   ? "Processing..."
-                   : `Proceed to Pay ₹${displayAmount.toFixed(2)}`}
+                {processing
+                  ? "Processing..."
+                  : `Proceed to Pay ₹${displayAmount.toFixed(2)}`}
               </button>
             </div>
             {error && (

@@ -11,13 +11,13 @@ export const createOrder = async (amount, currency = "INR") => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount, currency }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    console.log('Order created successfully:', data);
+    console.log("Order created successfully:", data);
     return data;
   } catch (error) {
     console.error("Error creating order:", error);
@@ -33,13 +33,13 @@ export const verifyPayment = async (paymentDetails) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(paymentDetails),
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
-    console.log('Payment verification result:', data);
+    console.log("Payment verification result:", data);
     return data;
   } catch (error) {
     console.error("Error verifying payment:", error);
@@ -55,8 +55,8 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
 const razorpay = new Razorpay({
-  key_id: 'rzp_test_rN3ysbintURr2f',
-  key_secret: '0BhzmL3LO4S2BoNdOoxt5YkM'
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
 // Create order endpoint
@@ -99,4 +99,4 @@ app.post('/api/verify-payment', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-*/ 
+*/

@@ -1,7 +1,7 @@
 // Razorpay service for handling payments
 import { createOrder, verifyPayment } from "./backendService";
 
-const RAZORPAY_KEY_ID = "rzp_test_rN3ysbintURr2f";
+const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
 // Load Razorpay script dynamically
 const loadRazorpayScript = () => {
@@ -20,7 +20,12 @@ const loadRazorpayScript = () => {
 };
 
 // Initialize Razorpay payment
-export const initializePayment = async (amount, bookingData, onSuccess, onFailure) => {
+export const initializePayment = async (
+  amount,
+  bookingData,
+  onSuccess,
+  onFailure
+) => {
   try {
     // Load Razorpay script
     await loadRazorpayScript();
@@ -61,15 +66,15 @@ export const initializePayment = async (amount, bookingData, onSuccess, onFailur
       },
       notes: {
         booking_id: bookingData.lotId + "_" + bookingData.slotId,
-        customer_id: bookingData.uid
+        customer_id: bookingData.uid,
       },
       theme: {
         color: "#10B981", // Green theme
       },
       modal: {
-        ondismiss: function() {
+        ondismiss: function () {
           onFailure("Payment cancelled by user");
-        }
+        },
       },
       // Enable UPI and other payment methods
       config: {
@@ -79,43 +84,42 @@ export const initializePayment = async (amount, bookingData, onSuccess, onFailur
               name: "Pay using UPI",
               instruments: [
                 {
-                  method: "upi"
-                }
-              ]
+                  method: "upi",
+                },
+              ],
             },
             other: {
               name: "Other Payment methods",
               instruments: [
                 {
-                  method: "card"
+                  method: "card",
                 },
                 {
-                  method: "netbanking"
-                }
-              ]
-            }
+                  method: "netbanking",
+                },
+              ],
+            },
           },
           sequence: ["block.banks", "block.other"],
           preferences: {
-            show_default_blocks: false
-          }
-        }
-      }
+            show_default_blocks: false,
+          },
+        },
+      },
     };
 
     // Create and open Razorpay instance
     const rzp = new window.Razorpay(options);
-    
+
     rzp.on("payment.failed", function (response) {
       onFailure(`Payment failed: ${response.error.description}`);
     });
 
     rzp.open();
-
   } catch (error) {
     onFailure("Failed to initialize payment: " + error.message);
   }
 };
 
 // Get Razorpay key for direct integration
-export const getRazorpayKey = () => RAZORPAY_KEY_ID; 
+export const getRazorpayKey = () => RAZORPAY_KEY_ID;

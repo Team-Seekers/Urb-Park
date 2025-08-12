@@ -11,6 +11,11 @@ from email.mime.multipart import MIMEMultipart
 import time
 from datetime import datetime
 import sys
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def send_notification_to_backend(message):
     try:
@@ -27,10 +32,10 @@ def send_notification_to_backend(message):
 
 # ===== EMAIL CONFIGURATION =====
 EMAIL_CONFIG = {
-    'smtp_server': 'smtp.gmail.com',  # Change based on your email provider
-    'smtp_port': 587,
-    'sender_email': 'urbparkticketing@gmail.com',  # Your email
-    'sender_password': 'venn lnpt wriu jqem',  # Use app password for Gmail
+    'smtp_server': os.getenv('EMAIL_HOST', 'smtp.gmail.com'),  # Change based on your email provider
+    'smtp_port': int(os.getenv('EMAIL_PORT', '587')),
+    'sender_email': os.getenv('EMAIL_USER', 'urbparkticketing@gmail.com'),  # Your email
+    'sender_password': os.getenv('EMAIL_PASSWORD', 'venn lnpt wriu jqem'),  # Use app password for Gmail
 }
 
 def send_email(to_email, subject, body, html_body=None):
@@ -272,8 +277,9 @@ Phone: +1-XXX-XXX-XXXX
     return subject, plain_body, html_body
 
 # ===== FIREBASE CONNECTION =====
+# ---------------- Firebase Initialization ----------------
 cred = credentials.Certificate(
-    r"D:/URB_PARK/urban-park-d8825-firebase-adminsdk-fbsvc-10217ee984.json"
+    os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH', r"D:/URB_PARK/urban-park-d8825-firebase-adminsdk-fbsvc-10217ee984.json")
 )
 firebase_admin.initialize_app(cred)
 db = firestore.client()

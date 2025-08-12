@@ -11,20 +11,25 @@ import threading
 from flask import Flask, request, render_template_string
 import webbrowser
 import uuid
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ---------------- Firebase Init ----------------
 cred = credentials.Certificate(
-    r"D:/URB_PARK/urban-park-d8825-firebase-adminsdk-fbsvc-10217ee984.json"
+    os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH', r"D:/URB_PARK/urban-park-d8825-firebase-adminsdk-fbsvc-10217ee984.json")
 )
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # ---------------- Email Configuration ----------------
 # Configure these with your email settings
-EMAIL_HOST = "smtp.gmail.com"  # For Gmail
-EMAIL_PORT = 587
-EMAIL_USER = "urbparkticketing@gmail.com"  # Your email
-EMAIL_PASSWORD = "venn lnpt wriu jqem"  # Your app password (not regular password)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")  # For Gmail
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USER = os.getenv("EMAIL_USER", "urbparkticketing@gmail.com")  # Your email
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "venn lnpt wriu jqem")  # Your app password (not regular password)
 
 # ---------------- Flask App for Email Response ----------------
 app = Flask("_name_")

@@ -61,9 +61,18 @@ const loadRazorpayScript = () => {
 // Main React component for the Razorpay payment form.
 const Razorpay = ({ bookingDetails }) => {
   // Calculate amount based on booking details
-  const calculatedAmount = bookingDetails ? 
-    Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) * 100) : 5000;
-  
+  const calculatedAmount = bookingDetails
+    ? Math.round(
+        parseFloat(
+          calculateTotalPrice(
+            bookingDetails.lot,
+            new Date(bookingDetails.startTime),
+            new Date(bookingDetails.endTime)
+          )
+        ) * 100
+      )
+    : 5000;
+
   const [amount, setAmount] = useState(calculatedAmount); // Amount in smallest currency unit (paisa)
   const [isRazorpayLoaded, setIsRazorpayLoaded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -71,7 +80,15 @@ const Razorpay = ({ bookingDetails }) => {
   // Update amount when booking details change
   useEffect(() => {
     if (bookingDetails) {
-      const newAmount = Math.round(parseFloat(calculateTotalPrice(bookingDetails.lot, new Date(bookingDetails.startTime), new Date(bookingDetails.endTime))) * 100);
+      const newAmount = Math.round(
+        parseFloat(
+          calculateTotalPrice(
+            bookingDetails.lot,
+            new Date(bookingDetails.startTime),
+            new Date(bookingDetails.endTime)
+          )
+        ) * 100
+      );
       setAmount(newAmount);
     }
   }, [bookingDetails]);
@@ -106,7 +123,7 @@ const Razorpay = ({ bookingDetails }) => {
 
       // Step 2: Configure and open the Razorpay payment modal.
       const options = {
-        key: "rzp_test_rN3ysbintURr2f", // Your Razorpay Key ID
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Your Razorpay Key ID
         amount: order.amount,
         currency: order.currency,
         name: "Urb-Park",
@@ -134,7 +151,7 @@ const Razorpay = ({ bookingDetails }) => {
         },
         notes: {
           booking_id: "parking_booking",
-          customer_id: "user"
+          customer_id: "user",
         },
         theme: {
           color: "#F4B400", // Yellow theme to match the UI
@@ -147,28 +164,28 @@ const Razorpay = ({ bookingDetails }) => {
                 name: "Pay using UPI",
                 instruments: [
                   {
-                    method: "upi"
-                  }
-                ]
+                    method: "upi",
+                  },
+                ],
               },
               other: {
                 name: "Other Payment methods",
                 instruments: [
                   {
-                    method: "card"
+                    method: "card",
                   },
                   {
-                    method: "netbanking"
-                  }
-                ]
-              }
+                    method: "netbanking",
+                  },
+                ],
+              },
             },
             sequence: ["block.banks", "block.other"],
             preferences: {
-              show_default_blocks: false
-            }
-          }
-        }
+              show_default_blocks: false,
+            },
+          },
+        },
       };
 
       const rzp = new window.Razorpay(options);
@@ -202,7 +219,8 @@ const Razorpay = ({ bookingDetails }) => {
             required
           />
           <p className="text-sm text-gray-500">
-            Calculated amount: ₹{(amount / 100).toFixed(2)} (from booking details)
+            Calculated amount: ₹{(amount / 100).toFixed(2)} (from booking
+            details)
           </p>
           <button
             className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed"

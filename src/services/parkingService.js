@@ -94,20 +94,20 @@ const generateSlots = (totalSpots) => {
 // Check if time overlaps with existing bookings
 const isTimeOverlapping = (existingBookings, newStart, newEnd) => {
   if (!Array.isArray(existingBookings)) return false;
-  
+
   const newStartTime = new Date(newStart);
   const newEndTime = new Date(newEnd);
 
   return existingBookings.some((booking) => {
     // Skip cancelled or inactive bookings
-    if (booking.status !== 'active') return false;
+    if (booking.status !== "active") return false;
 
     // Safely handle different time formats
     let existingStart, existingEnd;
-    
+
     try {
       // Handle Firestore Timestamp objects
-      if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+      if (booking.startTime && typeof booking.startTime.toDate === "function") {
         existingStart = booking.startTime.toDate();
       } else if (booking.startTime) {
         existingStart = new Date(booking.startTime);
@@ -115,8 +115,8 @@ const isTimeOverlapping = (existingBookings, newStart, newEnd) => {
         // Skip bookings with invalid start time
         return false;
       }
-      
-      if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+
+      if (booking.endTime && typeof booking.endTime.toDate === "function") {
         existingEnd = booking.endTime.toDate();
       } else if (booking.endTime) {
         existingEnd = new Date(booking.endTime);
@@ -124,14 +124,13 @@ const isTimeOverlapping = (existingBookings, newStart, newEnd) => {
         // Skip bookings with invalid end time
         return false;
       }
-      
+
       // Validate dates
       if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) {
         return false;
       }
-      
     } catch (error) {
-      console.warn('Invalid booking time format:', booking);
+      console.warn("Invalid booking time format:", booking);
       return false;
     }
 
@@ -149,7 +148,7 @@ const validateBookingData = (bookingData) => {
     throw new Error("Booking data is required");
   }
 
-  const requiredFields = ['userId', 'startTime', 'endTime'];
+  const requiredFields = ["userId", "startTime", "endTime"];
   for (const field of requiredFields) {
     if (!bookingData[field]) {
       throw new Error(`Missing required field: ${field}`);
@@ -183,7 +182,7 @@ export const fetchAllParkingAreas = async () => {
           ? data.coordinates
           : data.location;
       const coordinates = parseCoordinates(rawCoordinates);
-      
+
       return {
         id: doc.id,
         name: data.name || `Parking ${doc.id}`,
@@ -204,7 +203,7 @@ export const fetchAllParkingAreas = async () => {
         lng: coordinates[1],
       };
     });
-    
+
     return parkingAreas;
   } catch (error) {
     console.error("Error fetching parking areas:", error);
@@ -217,16 +216,16 @@ export const fetchParkingAreaById = async (parkingId) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingSnap = await getDoc(parkingRef);
-    
+
     if (!parkingSnap.exists()) return null;
-    
+
     const data = parkingSnap.data();
     const rawCoordinates =
       data.coordinates !== undefined && data.coordinates !== null
         ? data.coordinates
         : data.location;
     const coordinates = parseCoordinates(rawCoordinates);
-    
+
     return {
       id: parkingSnap.id,
       name: data.name,
@@ -256,12 +255,13 @@ export const createParkingArea = async (parkingData) => {
   try {
     const totalSpots = parkingData.totalSpots || 20;
     const slots = generateSlots(totalSpots);
-    
+
     const newParkingArea = {
       name: parkingData.name,
       address: parkingData.address,
       coordinates: parseCoordinates(
-        parkingData.coordinates !== undefined && parkingData.coordinates !== null
+        parkingData.coordinates !== undefined &&
+          parkingData.coordinates !== null
           ? parkingData.coordinates
           : parkingData.location
       ),
@@ -275,7 +275,7 @@ export const createParkingArea = async (parkingData) => {
     };
 
     const docRef = await addDoc(collection(db, "parkingAreas"), newParkingArea);
-    
+
     return {
       id: docRef.id,
       ...newParkingArea,
@@ -293,7 +293,7 @@ export const updateParkingArea = async (parkingId, updateData) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const updatePayload = { ...updateData };
-    
+
     // Parse coordinates if provided
     if (
       Object.prototype.hasOwnProperty.call(updateData, "coordinates") ||
@@ -305,7 +305,7 @@ export const updateParkingArea = async (parkingId, updateData) => {
           : updateData.location;
       updatePayload.coordinates = parseCoordinates(rawCoordinates);
     }
-    
+
     await updateDoc(parkingRef, updatePayload);
     return { success: true };
   } catch (error) {
@@ -329,7 +329,10 @@ export const deleteParkingArea = async (parkingId) => {
 // ===== SLOT MANAGEMENT FUNCTIONS =====
 
 // Fetch slots for a specific parking area - returns both array format and object map
-export const fetchSlotsForParkingArea = async (parkingId, returnAsMap = false) => {
+export const fetchSlotsForParkingArea = async (
+  parkingId,
+  returnAsMap = false
+) => {
   try {
     const parkingArea = await fetchParkingAreaById(parkingId);
     if (!parkingArea || !parkingArea.slots) {
@@ -339,7 +342,7 @@ export const fetchSlotsForParkingArea = async (parkingId, returnAsMap = false) =
     if (returnAsMap) {
       // Convert slots array to object map for easier access
       const slotsMap = {};
-      parkingArea.slots.forEach(slot => {
+      parkingArea.slots.forEach((slot) => {
         slotsMap[slot.slotId] = slot.bookings || [];
       });
       return slotsMap;
@@ -357,7 +360,7 @@ export const addSlotsToParkingArea = async (parkingId, newSlotIds) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -392,11 +395,14 @@ export const addSlotsToParkingArea = async (parkingId, newSlotIds) => {
 };
 
 // Remove slots from a parking area
-export const removeSlotsFromParkingArea = async (parkingId, slotIdsToRemove) => {
+export const removeSlotsFromParkingArea = async (
+  parkingId,
+  slotIdsToRemove
+) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -428,7 +434,7 @@ export const removeSlotsFromParkingArea = async (parkingId, slotIdsToRemove) => 
 // Calculate available spots based on current active bookings
 const calculateAvailableSpots = (slots) => {
   if (!Array.isArray(slots)) return 0;
-  
+
   const currentTime = new Date();
   let occupiedCount = 0;
 
@@ -436,40 +442,45 @@ const calculateAvailableSpots = (slots) => {
     if (Array.isArray(slot.bookings)) {
       const hasActiveBooking = slot.bookings.some((booking) => {
         if (booking.status !== "active") return false;
-        
+
         // Safely handle different time formats
         let startTime, endTime;
-        
+
         try {
-          if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+          if (
+            booking.startTime &&
+            typeof booking.startTime.toDate === "function"
+          ) {
             startTime = booking.startTime.toDate();
           } else if (booking.startTime) {
             startTime = new Date(booking.startTime);
           } else {
             return false;
           }
-          
-          if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+
+          if (booking.endTime && typeof booking.endTime.toDate === "function") {
             endTime = booking.endTime.toDate();
           } else if (booking.endTime) {
             endTime = new Date(booking.endTime);
           } else {
             return false;
           }
-          
+
           // Validate dates
           if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
             return false;
           }
-          
         } catch (error) {
-          console.warn('Invalid booking time format in calculateAvailableSpots:', booking);
+          console.warn(
+            "Invalid booking time format in calculateAvailableSpots:",
+            booking
+          );
           return false;
         }
-        
+
         return currentTime >= startTime && currentTime <= endTime;
       });
-      
+
       if (hasActiveBooking) occupiedCount++;
     }
   });
@@ -482,7 +493,7 @@ export const updateParkingAreaAvailability = async (parkingId) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -495,10 +506,10 @@ export const updateParkingAreaAvailability = async (parkingId) => {
       availableSpots: availableSpots,
     });
 
-    return { 
-      success: true, 
-      totalSpots: slots.length, 
-      availableSpots 
+    return {
+      success: true,
+      totalSpots: slots.length,
+      availableSpots,
     };
   } catch (error) {
     console.error("Error updating parking area availability:", error);
@@ -509,7 +520,11 @@ export const updateParkingAreaAvailability = async (parkingId) => {
 // ===== BOOKING FUNCTIONS =====
 
 // Check slot availability for a specific time range
-export const getSlotAvailabilityForTimeRange = async (parkingId, startTime, endTime) => {
+export const getSlotAvailabilityForTimeRange = async (
+  parkingId,
+  startTime,
+  endTime
+) => {
   try {
     const slotsMap = await fetchSlotsForParkingArea(parkingId, true);
     const availabilityMap = {};
@@ -547,7 +562,7 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
     const result = await runTransaction(db, async (transaction) => {
       const parkingRef = doc(db, "parkingAreas", parkingId);
       const parkingDoc = await transaction.get(parkingRef);
-      
+
       if (!parkingDoc.exists()) {
         throw new Error("Parking area not found");
       }
@@ -555,7 +570,7 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
       const parkingData = parkingDoc.data();
       const slots = [...(parkingData.slots || [])];
       let slotIndex = slots.findIndex((slot) => slot.slotId === slotId);
-      
+
       // If slot doesn't exist, create it
       if (slotIndex === -1) {
         const newSlot = {
@@ -568,10 +583,18 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
       }
 
       const slot = slots[slotIndex];
-      
+
       // Check for time conflicts with active bookings only
-      if (isTimeOverlapping(slot.bookings, validatedBookingData.startTime, validatedBookingData.endTime)) {
-        throw new Error("This slot has been booked just now by another user before you. Please select a different slot or time.");
+      if (
+        isTimeOverlapping(
+          slot.bookings,
+          validatedBookingData.startTime,
+          validatedBookingData.endTime
+        )
+      ) {
+        throw new Error(
+          "This slot has been booked just now by another user before you. Please select a different slot or time."
+        );
       }
 
       // Create new booking with proper validation
@@ -585,6 +608,8 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
         paymentId: validatedBookingData.paymentId,
         orderId: validatedBookingData.orderId,
         createdAt: Timestamp.now(),
+        // Add TTL field for automatic deletion when booking expires
+        ttl: Timestamp.fromDate(new Date(validatedBookingData.endTime)),
       };
 
       // Add booking to slot
@@ -592,7 +617,7 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
 
       // Update parking area with transaction
       const availableSpots = calculateAvailableSpots(slots);
-      
+
       transaction.update(parkingRef, {
         slots: slots,
         availableSpots: availableSpots,
@@ -602,7 +627,10 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
     });
 
     // Add to user history if not guest (outside transaction)
-    if (validatedBookingData.userId && validatedBookingData.userId !== "guest") {
+    if (
+      validatedBookingData.userId &&
+      validatedBookingData.userId !== "guest"
+    ) {
       try {
         const historyData = {
           areaId: parkingId,
@@ -613,17 +641,17 @@ export const bookParkingSlot = async (parkingId, slotId, bookingData) => {
           paymentId: validatedBookingData.paymentId,
           orderId: validatedBookingData.orderId,
         };
-        
+
         await addBookingToUserHistory(validatedBookingData.userId, historyData);
       } catch (historyError) {
         console.warn("Could not add to user history:", historyError);
       }
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `Successfully booked slot ${slotId}`,
-      booking: result.newBooking 
+      booking: result.newBooking,
     };
   } catch (error) {
     console.error("Error booking parking slot:", error);
@@ -636,7 +664,7 @@ export const cancelBooking = async (parkingId, slotId, bookingToCancel) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -644,16 +672,18 @@ export const cancelBooking = async (parkingId, slotId, bookingToCancel) => {
     const parkingData = parkingDoc.data();
     const slots = [...(parkingData.slots || [])];
     const slotIndex = slots.findIndex((slot) => slot.slotId === slotId);
-    
+
     if (slotIndex === -1) {
       throw new Error("Slot not found");
     }
 
     // Find and update the booking status
     const bookings = slots[slotIndex].bookings;
-    const bookingIndex = bookings.findIndex((booking) => 
-      booking.userId === bookingToCancel.userId &&
-      booking.startTime.toMillis() === new Date(bookingToCancel.startTime).getTime()
+    const bookingIndex = bookings.findIndex(
+      (booking) =>
+        booking.userId === bookingToCancel.userId &&
+        booking.startTime.toMillis() ===
+          new Date(bookingToCancel.startTime).getTime()
     );
 
     if (bookingIndex === -1) {
@@ -665,7 +695,7 @@ export const cancelBooking = async (parkingId, slotId, bookingToCancel) => {
 
     // Update parking area
     const availableSpots = calculateAvailableSpots(slots);
-    
+
     await updateDoc(parkingRef, {
       slots: slots,
       availableSpots: availableSpots,
@@ -711,6 +741,8 @@ export const addBookingToUserHistory = async (userId, bookingData) => {
       status: "active",
       paymentComplete: true,
       createdAt: Timestamp.now(),
+      // Add TTL field for automatic deletion when booking expires
+      ttl: Timestamp.fromDate(new Date(bookingData.endTime)),
     };
 
     // Filter out undefined values to prevent Firebase errors
@@ -751,7 +783,7 @@ export const getUserBookingHistory = async (userId) => {
 export const getActiveBookingFromUser = async (userId) => {
   try {
     const userHistory = await getUserBookingHistory(userId);
-    
+
     // Find most recent active booking
     const activeBooking = userHistory
       .filter((booking) => booking.status === "active")
@@ -872,13 +904,13 @@ export const subscribeToSlotAvailability = (parkingId, callback) => {
       if (doc.exists()) {
         const data = doc.data();
         const slots = data.slots || [];
-        
+
         // Convert to slots map format for compatibility
         const slotsMap = {};
-        slots.forEach(slot => {
+        slots.forEach((slot) => {
           slotsMap[slot.slotId] = slot.bookings || [];
         });
-        
+
         callback(slotsMap);
       } else {
         callback({});
@@ -901,7 +933,7 @@ export const getParkingAreaAnalytics = async (parkingId) => {
     const slots = parkingArea.slots || [];
     const totalSlots = slots.length;
     const currentTime = new Date();
-    
+
     let occupiedSlots = 0;
     let totalRevenue = 0;
     let activeBookings = 0;
@@ -910,20 +942,20 @@ export const getParkingAreaAnalytics = async (parkingId) => {
       if (Array.isArray(slot.bookings)) {
         slot.bookings.forEach((booking) => {
           if (booking.status === "active") {
-            const startTime = booking.startTime.toDate 
-              ? booking.startTime.toDate() 
+            const startTime = booking.startTime.toDate
+              ? booking.startTime.toDate()
               : new Date(booking.startTime);
-            const endTime = booking.endTime.toDate 
-              ? booking.endTime.toDate() 
+            const endTime = booking.endTime.toDate
+              ? booking.endTime.toDate()
               : new Date(booking.endTime);
-            
+
             // Check if booking is currently active
             if (currentTime >= startTime && currentTime <= endTime) {
               occupiedSlots++;
             }
-            
+
             activeBookings++;
-            
+
             // Calculate revenue
             const hours = (endTime - startTime) / (1000 * 60 * 60);
             totalRevenue += hours * parkingArea.pricePerHour;
@@ -968,23 +1000,23 @@ export const getParkingAreaRevenueReport = async (
     slots.forEach((slot) => {
       if (Array.isArray(slot.bookings)) {
         slot.bookings.forEach((booking) => {
-          const bookingDate = booking.createdAt.toDate 
-            ? booking.createdAt.toDate() 
+          const bookingDate = booking.createdAt.toDate
+            ? booking.createdAt.toDate()
             : new Date(booking.createdAt);
-          
+
           if (bookingDate >= startDate && bookingDate <= endDate) {
             totalBookings++;
-            
+
             if (booking.paymentComplete) {
               completedPayments++;
-              
-              const startTime = booking.startTime.toDate 
-                ? booking.startTime.toDate() 
+
+              const startTime = booking.startTime.toDate
+                ? booking.startTime.toDate()
                 : new Date(booking.startTime);
-              const endTime = booking.endTime.toDate 
-                ? booking.endTime.toDate() 
+              const endTime = booking.endTime.toDate
+                ? booking.endTime.toDate()
                 : new Date(booking.endTime);
-              
+
               const hours = (endTime - startTime) / (1000 * 60 * 60);
               totalRevenue += hours * parkingArea.pricePerHour;
             }
@@ -1074,14 +1106,14 @@ export const submitRatingForBooking = async (
     // Update user history to mark booking as rated
     const userRef = doc(db, "users", userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (!userDoc.exists()) {
       throw new Error("User not found");
     }
 
     const userData = userDoc.data();
     const history = [...(userData.history || [])];
-    
+
     if (!history[bookingIndex]) {
       throw new Error("Booking not found");
     }
@@ -1098,7 +1130,7 @@ export const submitRatingForBooking = async (
     // Update parking area rating
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -1106,19 +1138,20 @@ export const submitRatingForBooking = async (
     const parkingData = parkingDoc.data();
     const currentRating = parkingData.rating || 0;
     const reviewCount = parkingData.reviewCount || 0;
-    
+
     const newReviewCount = reviewCount + 1;
-    const newAverageRating = (currentRating * reviewCount + newRating) / newReviewCount;
+    const newAverageRating =
+      (currentRating * reviewCount + newRating) / newReviewCount;
 
     await updateDoc(parkingRef, {
       rating: newAverageRating,
       reviewCount: newReviewCount,
     });
 
-    return { 
-      success: true, 
-      newRating: newAverageRating, 
-      reviewCount: newReviewCount 
+    return {
+      success: true,
+      newRating: newAverageRating,
+      reviewCount: newReviewCount,
     };
   } catch (error) {
     console.error("Error submitting rating:", error);
@@ -1137,7 +1170,7 @@ export const addMaintenanceBooking = async (
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -1145,7 +1178,7 @@ export const addMaintenanceBooking = async (
     const parkingData = parkingDoc.data();
     const slots = [...(parkingData.slots || [])];
     const slotIndex = slots.findIndex((slot) => slot.slotId === slotId);
-    
+
     if (slotIndex === -1) {
       // Create slot if it doesn't exist
       slots.push({ slotId, bookings: [] });
@@ -1166,6 +1199,8 @@ export const addMaintenanceBooking = async (
       createdAt: Timestamp.now(),
       maintenanceType: maintenanceData.maintenanceType || "General",
       notes: maintenanceData.notes || "",
+      // Add TTL field for automatic deletion when maintenance ends
+      ttl: Timestamp.fromDate(new Date(maintenanceData.endTime)),
     };
 
     slots[targetSlotIndex].bookings.push(maintenanceBooking);
@@ -1198,7 +1233,7 @@ export const getParkingAreaMaintenanceSchedule = async (parkingId) => {
         const maintenanceBookings = slot.bookings.filter(
           (booking) => booking.status === "maintenance"
         );
-        
+
         if (maintenanceBookings.length > 0) {
           maintenanceSlots.push({
             slotId: slot.slotId,
@@ -1233,11 +1268,11 @@ export const bulkUpdateParkingAreaStatus = async (parkingIds, newStatus) => {
     });
 
     await Promise.all(updatePromises);
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       updatedCount: parkingIds.length,
-      newStatus 
+      newStatus,
     };
   } catch (error) {
     console.error("Error bulk updating parking area status:", error);
@@ -1307,12 +1342,12 @@ export const getParkingAreaStats = async (parkingId) => {
 export const getAllParkingAreasWithAnalytics = async () => {
   try {
     const parkingAreas = await fetchAllParkingAreas();
-    
+
     const areasWithAnalytics = await Promise.all(
       parkingAreas.map(async (area) => {
         const analytics = await getParkingAreaAnalytics(area.id);
-        return { 
-          ...area, 
+        return {
+          ...area,
           analytics: analytics || {
             totalSlots: area.totalSpots,
             occupiedSlots: 0,
@@ -1320,7 +1355,7 @@ export const getAllParkingAreasWithAnalytics = async () => {
             occupancyRate: 0,
             totalRevenue: "0.00",
             activeBookings: 0,
-          }
+          },
         };
       })
     );
@@ -1337,40 +1372,39 @@ export const getAllParkingAreasWithAnalytics = async () => {
 // Check if a specific slot is currently booked
 export const isSlotBooked = (slot, currentTime = new Date()) => {
   if (!slot.bookings || !Array.isArray(slot.bookings)) return false;
-  
+
   return slot.bookings.some((booking) => {
     if (booking.status !== "active") return false;
-    
+
     // Safely handle different time formats
     let startTime, endTime;
-    
+
     try {
-      if (booking.startTime && typeof booking.startTime.toDate === 'function') {
+      if (booking.startTime && typeof booking.startTime.toDate === "function") {
         startTime = booking.startTime.toDate();
       } else if (booking.startTime) {
         startTime = new Date(booking.startTime);
       } else {
         return false;
       }
-      
-      if (booking.endTime && typeof booking.endTime.toDate === 'function') {
+
+      if (booking.endTime && typeof booking.endTime.toDate === "function") {
         endTime = booking.endTime.toDate();
       } else if (booking.endTime) {
         endTime = new Date(booking.endTime);
       } else {
         return false;
       }
-      
+
       // Validate dates
       if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
         return false;
       }
-      
     } catch (error) {
-      console.warn('Invalid booking time format in isSlotBooked:', booking);
+      console.warn("Invalid booking time format in isSlotBooked:", booking);
       return false;
     }
-    
+
     return currentTime >= startTime && currentTime <= endTime;
   });
 };
@@ -1383,8 +1417,10 @@ export const updateSlotStatus = async (
   durationInHours,
   userId
 ) => {
-  const endTime = new Date(new Date(startTime).getTime() + durationInHours * 60 * 60 * 1000);
-  
+  const endTime = new Date(
+    new Date(startTime).getTime() + durationInHours * 60 * 60 * 1000
+  );
+
   const bookingData = {
     userId: userId,
     vehicleNumber: "N/A", // You might want to require this parameter
@@ -1402,7 +1438,7 @@ export const createDummyParkingArea = async () => {
   const dummyData = {
     name: "Urban Park Zone A",
     address: "123 Main Street, Downtown",
-    coordinates: [40.7128, -74.0060], // NYC coordinates
+    coordinates: [40.7128, -74.006], // NYC coordinates
     totalSpots: 12,
     pricePerHour: 25,
   };
@@ -1449,12 +1485,14 @@ export const bookParkingSlotAfterPayment = async (
     return await bookParkingSlot(parkingId, slotId, enhancedBookingData);
   } catch (error) {
     console.error("Error booking parking slot after payment:", error);
-    
+
     // If slot is already booked, provide a more helpful error message
     if (error.message.includes("already booked")) {
-      throw new Error("This slot was booked by another user during payment. Please try booking a different slot or contact support for a refund.");
+      throw new Error(
+        "This slot was booked by another user during payment. Please try booking a different slot or contact support for a refund."
+      );
     }
-    
+
     throw error;
   }
 };
@@ -1507,7 +1545,7 @@ export const getSlotBookings = async (parkingId, slotId) => {
     const parkingArea = await fetchParkingAreaById(parkingId);
     if (!parkingArea) return [];
 
-    const slot = parkingArea.slots.find(s => s.slotId === slotId);
+    const slot = parkingArea.slots.find((s) => s.slotId === slotId);
     return slot ? slot.bookings || [] : [];
   } catch (error) {
     console.error("Error fetching slot bookings:", error);
@@ -1516,16 +1554,21 @@ export const getSlotBookings = async (parkingId, slotId) => {
 };
 
 // Get slot availability with detailed booking information
-export const getSlotAvailabilityWithBookings = async (parkingId, slotId, startTime, endTime) => {
+export const getSlotAvailabilityWithBookings = async (
+  parkingId,
+  slotId,
+  startTime,
+  endTime
+) => {
   try {
     const slotBookings = await getSlotBookings(parkingId, slotId);
     const isBooked = isTimeOverlapping(slotBookings, startTime, endTime);
-    
+
     return {
       slotId,
       isAvailable: !isBooked,
       existingBookings: slotBookings,
-      requestedTimeRange: { startTime, endTime }
+      requestedTimeRange: { startTime, endTime },
     };
   } catch (error) {
     console.error("Error getting slot availability with bookings:", error);
@@ -1533,7 +1576,7 @@ export const getSlotAvailabilityWithBookings = async (parkingId, slotId, startTi
       slotId,
       isAvailable: false,
       existingBookings: [],
-      requestedTimeRange: { startTime, endTime }
+      requestedTimeRange: { startTime, endTime },
     };
   }
 };
@@ -1543,7 +1586,7 @@ export const ensureSlotExists = async (parkingId, slotId) => {
   try {
     const parkingRef = doc(db, "parkingAreas", parkingId);
     const parkingDoc = await getDoc(parkingRef);
-    
+
     if (!parkingDoc.exists()) {
       throw new Error("Parking area not found");
     }
@@ -1551,7 +1594,7 @@ export const ensureSlotExists = async (parkingId, slotId) => {
     const parkingData = parkingDoc.data();
     const slots = [...(parkingData.slots || [])];
     const slotIndex = slots.findIndex((slot) => slot.slotId === slotId);
-    
+
     // If slot doesn't exist, create it
     if (slotIndex === -1) {
       const newSlot = {
@@ -1559,18 +1602,144 @@ export const ensureSlotExists = async (parkingId, slotId) => {
         bookings: [],
       };
       slots.push(newSlot);
-      
+
       await updateDoc(parkingRef, {
         slots: slots,
       });
-      
+
       console.log(`Created new slot ${slotId} for parking area ${parkingId}`);
       return { success: true, slotCreated: true, slotId };
     }
-    
+
     return { success: true, slotCreated: false, slotId };
   } catch (error) {
     console.error("Error ensuring slot exists:", error);
+    throw error;
+  }
+};
+
+// ===== TTL MANAGEMENT FUNCTIONS =====
+
+// Create TTL timestamp for automatic deletion
+export const createTTLTimestamp = (endTime) => {
+  try {
+    const endDate = new Date(endTime);
+    return Timestamp.fromDate(endDate);
+  } catch (error) {
+    console.error("Error creating TTL timestamp:", error);
+    // Fallback: add 1 hour to current time if endTime is invalid
+    return Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000));
+  }
+};
+
+// Check if a booking has expired based on TTL
+export const isBookingExpired = (booking) => {
+  try {
+    if (!booking.ttl) return false;
+
+    const ttlDate = booking.ttl.toDate
+      ? booking.ttl.toDate()
+      : new Date(booking.ttl);
+    const now = new Date();
+
+    return now >= ttlDate;
+  } catch (error) {
+    console.error("Error checking if booking is expired:", error);
+    return false;
+  }
+};
+
+// Clean up expired bookings from a parking area
+export const cleanupExpiredBookings = async (parkingId) => {
+  try {
+    const parkingRef = doc(db, "parkingAreas", parkingId);
+    const parkingDoc = await getDoc(parkingRef);
+
+    if (!parkingDoc.exists()) {
+      throw new Error("Parking area not found");
+    }
+
+    const parkingData = parkingDoc.data();
+    const slots = [...(parkingData.slots || [])];
+    let totalExpired = 0;
+    let hasChanges = false;
+
+    // Check each slot for expired bookings
+    slots.forEach((slot) => {
+      if (Array.isArray(slot.bookings)) {
+        const originalLength = slot.bookings.length;
+        slot.bookings = slot.bookings.filter(
+          (booking) => !isBookingExpired(booking)
+        );
+        const expiredCount = originalLength - slot.bookings.length;
+        totalExpired += expiredCount;
+
+        if (expiredCount > 0) {
+          hasChanges = true;
+        }
+      }
+    });
+
+    // Update parking area if there were expired bookings
+    if (hasChanges) {
+      const availableSpots = calculateAvailableSpots(slots);
+
+      await updateDoc(parkingRef, {
+        slots: slots,
+        availableSpots: availableSpots,
+      });
+
+      console.log(
+        `Cleaned up ${totalExpired} expired bookings from parking area ${parkingId}`
+      );
+    }
+
+    return {
+      success: true,
+      expiredBookingsRemoved: totalExpired,
+      hasChanges,
+    };
+  } catch (error) {
+    console.error("Error cleaning up expired bookings:", error);
+    throw error;
+  }
+};
+
+// Clean up expired bookings from user history
+export const cleanupExpiredUserHistory = async (userId) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      throw new Error("User not found");
+    }
+
+    const userData = userDoc.data();
+    const history = [...(userData.history || [])];
+    const originalLength = history.length;
+
+    // Remove expired bookings
+    const activeHistory = history.filter(
+      (booking) => !isBookingExpired(booking)
+    );
+    const expiredCount = originalLength - activeHistory.length;
+
+    if (expiredCount > 0) {
+      await updateDoc(userRef, { history: activeHistory });
+      console.log(
+        `Cleaned up ${expiredCount} expired bookings from user ${userId} history`
+      );
+    }
+
+    return {
+      success: true,
+      expiredBookingsRemoved: expiredCount,
+      originalCount: originalLength,
+      newCount: activeHistory.length,
+    };
+  } catch (error) {
+    console.error("Error cleaning up expired user history:", error);
     throw error;
   }
 };
@@ -1584,53 +1753,53 @@ export default {
   createParkingArea,
   updateParkingArea,
   deleteParkingArea,
-  
+
   // Slot management
   fetchSlotsForParkingArea,
   addSlotsToParkingArea,
   removeSlotsFromParkingArea,
   updateParkingAreaAvailability,
-  
+
   // Booking functions
   bookParkingSlot,
   bookParkingSlotAfterPayment,
   cancelBooking,
   getSlotAvailabilityForTimeRange,
-  
+
   // User functions
   addBookingToUserHistory,
   getUserBookingHistory,
   getActiveBookingFromUser,
   updateBookingStatusInUserHistory,
-  
+
   // Location functions
   getUserLocation,
   getNearbyParkingAreas,
   getNearbyParkingAreasWithAvailability,
-  
+
   // Search functions
   searchParkingAreas,
   searchParkingAreasWithAvailability,
-  
+
   // Analytics
   getParkingAreaAnalytics,
   getParkingAreaRevenueReport,
   getAllParkingAreasWithAnalytics,
-  
+
   // Ratings
   submitRatingForBooking,
-  
+
   // Maintenance
   addMaintenanceBooking,
   getParkingAreaMaintenanceSchedule,
-  
+
   // Bulk operations
   bulkUpdateParkingAreaStatus,
   getParkingAreasByStatus,
-  
+
   // Real-time
   subscribeToSlotAvailability,
-  
+
   // Utility functions
   getDistanceFromLatLonInKm,
   parseCoordinates,
@@ -1640,7 +1809,13 @@ export default {
   getSlotAvailabilityWithBookings,
   ensureSlotExists,
   validateBookingData,
-  
+
+  // TTL Management
+  createTTLTimestamp,
+  isBookingExpired,
+  cleanupExpiredBookings,
+  cleanupExpiredUserHistory,
+
   // Legacy compatibility
   getParkingAreas,
   getParkingSlots,

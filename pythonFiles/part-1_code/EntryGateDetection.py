@@ -4,10 +4,15 @@ import time
 import serial
 import firebase_admin
 from firebase_admin import credentials, firestore
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ---------------- Firebase Initialization ----------------
 cred = credentials.Certificate(
-    r"D:/URB_PARK/urban-park-d8825-firebase-adminsdk-fbsvc-10217ee984.json"
+    os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH', r"D:/URB_PARK/urban-park-d8825-firebase-adminsdk-fbsvc-10217ee984.json")
 )
 firebase_admin.initialize_app(cred)
 db = firestore.client()
