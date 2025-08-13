@@ -42,6 +42,7 @@ const BookingPage = () => {
   const [slotStatusMap, setSlotStatusMap] = useState({});
   const [realtimeUnsubscribe, setRealtimeUnsubscribe] = useState(null);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [actualSlotsFromDB, setActualSlotsFromDB] = useState([]); // Track actual slots from database
 
   // Set initial start time to current time (rounded to next hour)
   const getInitialStartTime = () => {
@@ -68,12 +69,15 @@ const BookingPage = () => {
         const data = await fetchParkingAreaById(id);
         if (data) {
           setLot(data);
+          // Store actual slots from database
+          setActualSlotsFromDB(data.slots || []);
           // Fetch slots for this parking area
           setIsLoadingSlots(true);
           const slotData = await fetchSlotsForParkingArea(id);
           setSlots(slotData);
           console.log("Parking area data:", data);
           console.log("Slot data:", slotData);
+          console.log("Actual slots from DB:", data.slots);
         } else {
           setError("Parking lot not found.");
         }
@@ -179,6 +183,27 @@ const BookingPage = () => {
     return spots;
   };
 
+  // Calculate available slots based on slotStatusMap (which includes all slots up to totalSpots)
+  const getActualAvailableSlots = () => {
+    if (!lot || !lot.totalSpots) return 0;
+    
+    let availableCount = 0;
+    for (let i = 1; i <= lot.totalSpots; i++) {
+      const slotId = `slot${i}`;
+      const slotStatus = slotStatusMap[slotId];
+      if (slotStatus === "available" || slotStatus === undefined) {
+        availableCount++;
+      }
+    }
+    
+    return availableCount;
+  };
+
+  // Get total slots count from lot.totalSpots
+  const getActualTotalSlots = () => {
+    return lot ? (lot.totalSpots || 0) : 0;
+  };
+
   // Check if booking is valid
   const isBookingValid = () => {
     return (
@@ -255,6 +280,9 @@ const BookingPage = () => {
 
       const newStatusMap = {};
       const slots = parkingArea.slots || [];
+      
+      // Update actual slots from database
+      setActualSlotsFromDB(slots);
       
       // Check each slot's availability based on time conflicts
       for (const slot of slots) {
@@ -339,7 +367,9 @@ const BookingPage = () => {
     buttonText = "Selected slot is unavailable";
   }
 
-  const availableSlots = Object.values(slotStatusMap).filter(status => status === "available").length;
+  // Use actual slots count from database
+  const availableSlots = getActualAvailableSlots();
+  const totalSlots = getActualTotalSlots();
 
   // Debug: Log features data
   console.log("BookingPage - lot features:", lot?.features, "type:", typeof lot?.features);
@@ -377,7 +407,7 @@ const BookingPage = () => {
                 Available Spots:
               </span>
               <span className="font-bold text-xl">
-                {availableSlots} / {lot.totalSpots || 0}
+                {availableSlots} / {totalSlots}
                 {isLoadingSlots && <span className="text-sm text-blue-500 ml-2">Checking...</span>}
               </span>
             </div>
