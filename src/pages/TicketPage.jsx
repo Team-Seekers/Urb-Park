@@ -126,8 +126,7 @@ const TicketPage = () => {
           </p>
           <QRCode
             data={JSON.stringify({
-              bookingId: booking.id,
-              vehicleNumber: booking.vehicleNumber,
+              bookingId: booking.id
             })}
           />
 
